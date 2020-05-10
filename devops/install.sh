@@ -24,4 +24,4 @@ npm install -g yarn
 
 # postgres
 
-sudo yum install postgresql postgresql-server postgresql-devel postgresql-contrib postgresql-docs -y
+sudo yum install postgresql -y
