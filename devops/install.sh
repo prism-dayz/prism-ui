@@ -21,3 +21,7 @@ nvm install v12.16.2
 
 # install yarn
 npm install -g yarn
+
+# postgres
+
+sudo yum install postgresql postgresql-server postgresql-devel postgresql-contrib postgresql-docs -y

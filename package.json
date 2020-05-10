@@ -1,6 +1,6 @@
 {
   "name": "eg-cloud-host-a",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "nodejs express postgress aws",
   "main": "src/index.js",
   "repository": "https://github.com/brngdsn/eg-cloud-host-a",
@@ -9,9 +9,9 @@
   "scripts": {
     "dev:api": "nodemon --watch src src/index.js",
     "serve:api": "node src/index.js",
-    "dev:client": "npm run serve:client",
-    "serve:client": "vue-cli-service serve",
-    "build:client": "vue-cli-service build"
+    "dev:spa": "npm run serve:client",
+    "serve:spa": "vue-cli-service serve",
+    "build:spa": "vue-cli-service build"
   },
   "dependencies": {
     "body-parser": "^1.19.0",
@@ -24,6 +24,7 @@
     "multer": "^1.4.2",
     "passport": "^0.4.1",
     "passport-local": "^1.0.0",
+    "pg": "^8.1.0",
     "request": "^2.88.2",
     "vue": "^2.6.11",
     "vue-router": "^3.1.6",
