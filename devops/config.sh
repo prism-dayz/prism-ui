@@ -12,8 +12,8 @@ sudo iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-ports 8000
 # serve current directory (e.g., `cd dist/ && serve`)
 # serve --port 8000
 
-sudo rm -rf /var/lib/pgsql9/data/pg_hba.conf
+sudo rm -rf /var/lib/pgsql/data/pg_hba.conf
 
-sudo cat ./devops/pg_hba.conf >> /var/lib/pgsql9/data/pg_hba.conf
+sudo cp ./devops/pg_hba.conf /var/lib/pgsql/data
 
 sudo service postgresql restart
