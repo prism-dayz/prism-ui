@@ -1,12 +1,14 @@
 {
   "name": "archaeon",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "description": "nodejs express postgress aws",
   "main": "src/index.js",
   "repository": "https://github.com/brngdsn/archaeon",
   "author": "brngdsn",
   "license": "MIT",
   "scripts": {
+    "initdb:osx": "cat ./sql/init.sql | sudo -u postgres psql -d archaeon",
+    "createdb:osx": "createdb archaeon",
     "ec2": "ssh -i ./archaeon.pem ec2-user@$EC2_HOST",
     "initdb": "cat ./sql/init.sql | sudo -u postgres psql -d archaeon",
     "createdb": "cat ./sql/create-db.sql | sudo -u postgres psql",
