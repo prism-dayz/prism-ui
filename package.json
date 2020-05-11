@@ -1,6 +1,6 @@
 {
   "name": "archaeon",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "nodejs express postgress aws",
   "main": "src/index.js",
   "repository": "https://github.com/brngdsn/archaeon",
@@ -9,7 +9,7 @@
   "scripts": {
     "ec2": "ssh -i ./archaeon.pem ec2-user@$EC2_HOST",
     "initdb": "cat ./sql/init.sql | sudo -u postgres psql -d egdb1",
-    "createdb": "cat ./sql/create-d.sql | sudo -u postgres psql",
+    "createdb": "cat ./sql/create-db.sql | sudo -u postgres psql",
     "dev:api": "nodemon --watch src src/index.js",
     "serve:api": "node src/index.js",
     "dev:spa": "npm run serve:client",
