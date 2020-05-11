@@ -1,6 +1,6 @@
 {
   "name": "eg-cloud-host-a",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "nodejs express postgress aws",
   "main": "src/index.js",
   "repository": "https://github.com/brngdsn/eg-cloud-host-a",
