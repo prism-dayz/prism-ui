@@ -15,7 +15,7 @@ sudo vim /var/lib/pgsql9/data/pg_hba.conf
 add
 
 ```
-host    egcloudhostb    egdbuser        127.0.0.1/32            md5
+host    archaeon    methanogen        127.0.0.1            md5
 ```
 
 ```
