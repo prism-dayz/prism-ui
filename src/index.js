@@ -10,11 +10,54 @@ const passport = require('passport')
 const { Strategy: LocalStrategy } = require('passport-local')
 const discord = require('discord.js')
 
+// instantiate web server
 const storage = multer.memoryStorage()
 const upload = multer({ storage, preservePath: true })
 const app = express()
 const port = process.env.API_PORT || 8000
 
+// connect to db
+const { Client } = pg
+const client = new Client({
+  host: 'localhost',
+  port: 5432,
+  user: 'methanogen',
+  password: 'methane',
+  database: 'archaeon'
+})
+
+const getDbConnection = async () => {
+  const dbConnection = await client.connect()
+  return dbConnection
+}
+
+const db = {
+  $connected: false,
+  $connection: null,
+  connection (connection) {
+    if (connection) {
+      this.$connection = connection
+    }
+    return this.$connection
+  },
+  connected () {
+    const { $connected } = this
+    return (req, res, next) => {
+      if ($connected) {
+        next()
+      } else {
+        res.status(500)
+        res.end()
+      }
+    }
+  }
+}
+
+getDbConnection()
+  .then(connection => (db.$connection = connection) && (db.$connected = true))
+  .catch(error => console.log('could not connect to db', error))
+
+// configure passport
 const localStrategyConfig = {
   usernameField: 'username',
   passwordField: 'password'
@@ -45,6 +88,7 @@ passport.deserializeUser((id, done) => {
 
 passport.use(new LocalStrategy(localStrategyConfig, localStrategyHandler))
 
+// configure web server
 app.use(express.urlencoded({ extended: true }))
 app.use(session({
   secret: 'sbyr395sriby9353597isr3rsyib5s7ryir7sb7isb9fh6sh8fgj568s65r3ybd5b68fgdjr',
@@ -61,9 +105,10 @@ const localPassportAuthenticationDirective = {
   failureRedirect: '/api/v2/unauthorized'
 }
 
-app.post('/api/v2/authenticate', passport.authenticate('local', localPassportAuthenticationDirective))
+// web server routes
+app.post('/api/v2/authenticate', db.connected(), passport.authenticate('local', localPassportAuthenticationDirective))
 
-app.get('/api/v2/authorized', async (req, res) => {
+app.get('/api/v2/authorized', db.connected(), async (req, res) => {
   res.send('authorized')
 })
 
@@ -75,4 +120,5 @@ app.get('/api/v2/ping', async (req, res) => {
   res.send('pong')
 })
 
+// web app serverp
 app.listen(port, () => console.log(`Example app listening at http://localhost:${port}`))
