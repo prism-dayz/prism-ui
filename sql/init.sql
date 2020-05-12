@@ -7,4 +7,11 @@ create table users (
   uborn date not null default now()
 );
 
+create table traffic (
+  tid serial primary key not null,
+  thostname varchar not null,
+  tip varchar not null,
+  tborn date not null default now()
+);
+
 insert into users (uname, upassword) values ('rainbows@clouds.io', crypt('sugarcane', gen_salt('bf')));

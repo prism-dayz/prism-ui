@@ -18,7 +18,7 @@ const port = process.env.API_PORT || 8001
 
 // connect to db
 const { Client } = pg
-const client = new Client({
+const dbClient = new Client({
   host: 'localhost',
   port: 5432,
   user: 'methanogen',
@@ -27,13 +27,16 @@ const client = new Client({
 })
 
 const getDbConnection = async () => {
-  const dbConnection = await client.connect()
+  const dbConnection = await dbClient.connect()
   return dbConnection
 }
 
 const db = {
   $connected: false,
   $connection: null,
+  query (query, params) {
+    return dbClient.query(query, params)
+  },
   connection (connection) {
     if (connection) {
       this.$connection = connection
@@ -54,7 +57,10 @@ const db = {
 }
 
 getDbConnection()
-  .then(connection => (db.$connection = connection) && (db.$connected = true))
+  .then(connection => {
+    db.$connection = connection
+    db.$connected = true
+  })
   .catch(error => console.log('could not connect to db', error))
 
 // configure passport
@@ -118,6 +124,35 @@ app.get('/api/v2/unauthorized', async (req, res) => {
 
 app.get('/api/v2/ping', async (req, res) => {
   res.send('pong')
+})
+
+app.get('/api/v2/traffic', async (req, res) => {
+  try {
+    const traffic = await db.query('select * from traffic')
+    res.send(traffic.rows)
+    res.end()
+  } catch (error) {
+    console.log(error)
+    res.status(500)
+    res.send(error)
+    res.end()
+  }
+})
+
+app.post('/api/v2/traffic', async (req, res) => {
+  try {
+    const { hostname, ip } = req
+    const query = 'insert into traffic (thostname, tip) values ($1, $2)'
+    const parameters = [hostname, ip]
+    await db.query(query, parameters)
+    res.status(201)
+    res.end()
+  } catch (error) {
+    console.log(error)
+    res.status(500)
+    res.send(error)
+    res.end()
+  }
 })
 
 // web app serverp
