@@ -14,7 +14,7 @@ const discord = require('discord.js')
 const storage = multer.memoryStorage()
 const upload = multer({ storage, preservePath: true })
 const app = express()
-const port = process.env.API_PORT || 8000
+const port = process.env.API_PORT || 8001
 
 // connect to db
 const { Client } = pg
