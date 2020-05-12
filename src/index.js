@@ -8,7 +8,19 @@ const request = require('request')
 const ws = require('ws')
 const passport = require('passport')
 const { Strategy: LocalStrategy } = require('passport-local')
+const { version } = require('../package.json')
 const discord = require('discord.js')
+
+// helpers functions
+const authorized = () => {
+  return (req, res, next) => {
+    if (req.isAuthenticated()) {
+      next()
+    } else {
+      res.redirect('/api/v2/unauthorized')
+    }
+  }
+}
 
 // instantiate web server
 const storage = multer.memoryStorage()
@@ -26,29 +38,21 @@ const dbClient = new Client({
   database: 'archaeon'
 })
 
-const getDbConnection = async () => {
-  const dbConnection = await dbClient.connect()
-  return dbConnection
-}
-
 const db = {
   $connected: false,
-  $connection: null,
   query (query, params) {
     return dbClient.query(query, params)
   },
-  connection (connection) {
-    if (connection) {
-      this.$connection = connection
-    }
-    return this.$connection
+  async connect () {
+    await dbClient.connect()
+    this.$connected = true
   },
   connected () {
-    const { $connected } = this
     return (req, res, next) => {
-      if ($connected) {
+      if (this.$connected) {
         next()
       } else {
+        console.log('not connected to db', this)
         res.status(500)
         res.end()
       }
@@ -56,12 +60,11 @@ const db = {
   }
 }
 
-getDbConnection()
-  .then(connection => {
-    db.$connection = connection
-    db.$connected = true
-  })
-  .catch(error => console.log('could not connect to db', error))
+try {
+  db.connect()
+} catch (error) {
+  console.log('could not connect to db', error)
+}
 
 // configure passport
 const localStrategyConfig = {
@@ -69,16 +72,24 @@ const localStrategyConfig = {
   passwordField: 'password'
 }
 
-const localStrategyHandler = (username, password, done) => {
-  // console.log('local_strategy', username, password)
+const localStrategyHandler = async (username, password, done) => {
+  console.log('local_strategy', username, password)
   // given the username and password from a request, see if it's valid in a db for instance
   // there are three variations of ways to call done() based on db query
-  if (username !== 'braun') {
+  // insert into users (uname, upassword) values ('rainbows@clouds.io', crypt('sugarcane', gen_salt('bf')))
+  try {
+    const query = 'select uid, uname, uborn from users where uname = $1 and upassword = crypt($2, upassword)'
+    const params = [username, password]
+    const result = await db.query(query, params)
+    console.log('localStrategyHandler', result)
+    if (result.rows.length < 1) {
+      done(null, false)
+    } else {
+      done(null, { ...result.rows[0], id: result.rows[0].uid })
+    }
+  } catch (error) {
+    console.log(error)
     done(null, false)
-  } else if (password !== 'braun') {
-    done(null, false)
-  } else {
-    done(null, { id: 0 })
   }
 }
 
@@ -87,9 +98,13 @@ passport.serializeUser((user, done) => {
   done(null, user.id)
 })
 
-passport.deserializeUser((id, done) => {
+passport.deserializeUser(async (id, done) => {
   // find user and user id in database, and pass it second param
-  done( null, { id })
+  const query = 'select uid, uname, uborn from users where uid = $1'
+  const params = [id]
+  const result = await db.query(query, params)
+  const user = { ...result.rows[0], id: result.rows[0].uid }
+  done( null, user)
 })
 
 passport.use(new LocalStrategy(localStrategyConfig, localStrategyHandler))
@@ -105,6 +120,10 @@ app.use(cors())
 app.use(morgan('tiny'))
 app.use(passport.initialize())
 app.use(passport.session())
+app.use((req, res, next) => {
+  res.set('X-Archaeon-API-Version', `v${version}`)
+  next()
+})
 
 const localPassportAuthenticationDirective = {
   successRedirect: '/api/v2/authorized',
@@ -112,9 +131,17 @@ const localPassportAuthenticationDirective = {
 }
 
 // web server routes
+app.get('/', async (req, res) => {
+  res.send({
+    message: 'hi',
+    version
+  })
+  res.end()
+})
+
 app.post('/api/v2/authenticate', db.connected(), passport.authenticate('local', localPassportAuthenticationDirective))
 
-app.get('/api/v2/authorized', db.connected(), async (req, res) => {
+app.get('/api/v2/authorized', authorized(), db.connected(), async (req, res) => {
   res.send('authorized')
 })
 
@@ -126,7 +153,7 @@ app.get('/api/v2/ping', async (req, res) => {
   res.send('pong')
 })
 
-app.get('/api/v2/traffic', async (req, res) => {
+app.get('/api/v2/traffic', db.connected(), async (req, res) => {
   try {
     const traffic = await db.query('select * from traffic')
     res.send(traffic.rows)
@@ -139,7 +166,7 @@ app.get('/api/v2/traffic', async (req, res) => {
   }
 })
 
-app.post('/api/v2/traffic', async (req, res) => {
+app.post('/api/v2/traffic', db.connected(), async (req, res) => {
   try {
     const { hostname, ip } = req
     const query = 'insert into traffic (thostname, tip) values ($1, $2)'
