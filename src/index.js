@@ -116,7 +116,7 @@ app.use(session({
   resave: true,
   saveUninitialized: true
 }))
-app.use(cors())
+app.use(cors({ credentials: true, origin: `http://localhost:8080` }))
 app.use(morgan('tiny'))
 app.use(passport.initialize())
 app.use(passport.session())
@@ -142,11 +142,14 @@ app.get('/', async (req, res) => {
 app.post('/api/v2/authenticate', db.connected(), passport.authenticate('local', localPassportAuthenticationDirective))
 
 app.get('/api/v2/authorized', authorized(), db.connected(), async (req, res) => {
-  res.send('authorized')
+  res.status(200)
+  res.end()
 })
 
 app.get('/api/v2/unauthorized', async (req, res) => {
+  res.status(401)
   res.send('unauthorized')
+  res.end()
 })
 
 app.get('/api/v2/ping', async (req, res) => {
@@ -172,6 +175,61 @@ app.post('/api/v2/traffic', db.connected(), async (req, res) => {
     const query = 'insert into traffic (thostname, tip) values ($1, $2)'
     const parameters = [hostname, ip]
     await db.query(query, parameters)
+    res.status(201)
+    res.end()
+  } catch (error) {
+    console.log(error)
+    res.status(500)
+    res.send(error)
+    res.end()
+  }
+})
+
+app.get('/api/v2/users/:username', db.connected(), async (req, res) => {
+  try {
+    const { params } = req
+    const { username } = params
+    const query = `select uname from users where uname = $1`
+    const parameters = [username]
+    const result = await db.query(query, parameters)
+    if (result.rows.length === 0) {
+      res.status(404)
+    } else {
+      res.status(200)
+    }
+    res.end()
+  } catch (error) {
+    console.log(error)
+    res.status(500)
+    res.send(error)
+    res.end()
+  }
+})
+
+app.post('/api/v2/register', db.connected(), upload.none(), async (req, res) => {
+  try {
+    const { body } = req
+    const { email, username, password } = body
+    await new Promise(async (resolve, reject) => {
+      const query = `select uname from users where uname = $1`
+      const parameters = [username]
+      const result = await db.query(query, parameters)
+      if (result.rows.length === 0) {
+        resolve(result)
+      } else {
+        reject(result)
+      }
+    })
+    await new Promise(async (resolve, reject) => {
+      const query = `insert into users (uname, uemail, upassword) values ($1, $2, crypt($3, gen_salt('bf'))) returning uname`
+      const parameters = [username, email, password]
+      const result = await db.query(query, parameters)
+      if (result.rows.length > 0) {
+        resolve(result)
+      } else {
+        reject(result)
+      }
+    })
     res.status(201)
     res.end()
   } catch (error) {

@@ -4,14 +4,51 @@
       <div v-if="!($route.name === 'Login')">
         <router-link to="/">Home</router-link> |
         <router-link to="/about">About</router-link> | 
-        <router-link to="/login">Login</router-link>
+        <router-link to="/login">Login</router-link> | 
+        <router-link to="/register">Register</router-link>
       </div>
     </div>
     <router-view />
   </div>
 </template>
 
+<script>
+export default {
+  name: 'app',
+  mounted () {
+    this.onTraffic()
+  },
+  methods: {
+    async onTraffic () {
+      // this.busy = true
+      // this.error = false
+      // this.success = false
+      try {
+        const response = await this.$http.post('http://localhost:8001/api/v2/traffic')
+        // this.success = true
+        // this.busy = false
+      } catch (error) {
+        console.log(error)
+        // this.error = true
+        // this.busy = false
+      }
+    }
+  }
+}
+</script>
+
 <style>
+
+.spin {
+  /* border: 1px solid red; */
+  animation: accelerated-spin infinite 3s ease-in-out;
+}
+@keyframes accelerated-spin {
+  to {
+    transform: rotate(3600deg);
+  }
+}
+
 #app {
   font-family: monospace;
   -webkit-font-smoothing: antialiased;

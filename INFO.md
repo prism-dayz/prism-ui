@@ -31,3 +31,5 @@ sudo /etc/init.d/postgresql restart
 ```
 
 sudo -u postgres psql
+
+anytime you drop a table you need to re give the privs to the db user

@@ -1,5 +1,5 @@
 <template>
-  <div class="login">
+  <div class="register">
     <section>
       <b-modal :active.sync="isComponentModalActive"
         has-modal-card
@@ -9,7 +9,7 @@
         aria-role="dialog"
         aria-modal
         >
-        <login-modal :header="getHeader()"></login-modal>
+        <register-modal v-bind="formProps" :header="getHeader()"></register-modal>
       </b-modal>
     </section>
   </div>
@@ -17,15 +17,19 @@
 
 <script>
 import { mapGetters } from 'vuex'
-import LoginModal from '@/components/LoginModal'
+import RegisterModal from '@/components/RegisterModal'
 export default {
-  name: 'Login',
+  name: 'Register',
   components: {
-    LoginModal
+    RegisterModal
   },
   data () {
     return {
-      isComponentModalActive: true
+      isComponentModalActive: true,
+      formProps: {
+        email: 'rainbows@clouds.io',
+        password: 'sugarcane'
+      }
     }
   },
   computed: {
