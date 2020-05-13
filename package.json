@@ -1,6 +1,6 @@
 {
   "name": "archaeon",
-  "version": "0.4.8",
+  "version": "0.4.9",
   "description": "nodejs express postgress aws",
   "main": "src/index.js",
   "repository": "https://github.com/brngdsn/archaeon",
