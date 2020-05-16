@@ -47,12 +47,13 @@ const RegisterModal = {
               const response = await this.$http.post('http://localhost:8001/api/v2/register', body, {
                   emulateJSON: true
               })
+              const { body: users } = response
+              const user = users.reduce((a,c) => c, {})
               this.success = true
               this.busy = false
               setTimeout(() => {
-                  this.$router.push({
-                      path: '/dashboard'
-                  })
+                  this.$emit('registered', user)
+                  this.$parent.close()
               }, 1500)
           } catch (error) {
               console.log(error)
@@ -135,14 +136,9 @@ const RegisterModal = {
                         required>
                     </b-input>
                 </b-field>
-
-                <b-checkbox style="margin-top:8px;">Remember me</b-checkbox>
-                <br />
-                <router-link to="/login" :disabled="busy || success">
-                    <span style="font-size:10px;">Login</span>
-                </router-link>
             </section>
             <footer class="modal-card-foot">
+                <button class="button" type="button" @click="$parent.close()">Close</button>
                 <button class="button is-primary"
                     :class="{
                         'is-success': success,

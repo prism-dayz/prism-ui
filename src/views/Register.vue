@@ -9,7 +9,7 @@
         aria-role="dialog"
         aria-modal
         >
-        <register-modal v-bind="formProps" :header="getHeader()"></register-modal>
+        <register-modal :header="getHeader()"></register-modal>
       </b-modal>
     </section>
   </div>

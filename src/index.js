@@ -52,7 +52,7 @@ const db = {
       if (this.$connected) {
         next()
       } else {
-        console.log('not connected to db', this)
+        //console.log('not connected to db', this)
         res.status(500)
         res.end()
       }
@@ -63,7 +63,7 @@ const db = {
 try {
   db.connect()
 } catch (error) {
-  console.log('could not connect to db', error)
+  //console.log('could not connect to db', error)
 }
 
 // configure passport
@@ -73,7 +73,7 @@ const localStrategyConfig = {
 }
 
 const localStrategyHandler = async (username, password, done) => {
-  console.log('local_strategy', username, password)
+  //console.log('local_strategy', username, password)
   // given the username and password from a request, see if it's valid in a db for instance
   // there are three variations of ways to call done() based on db query
   // insert into users (uname, upassword) values ('rainbows@clouds.io', crypt('sugarcane', gen_salt('bf')))
@@ -81,28 +81,31 @@ const localStrategyHandler = async (username, password, done) => {
     const query = 'select uid, uname, uborn from users where uname = $1 and upassword = crypt($2, upassword)'
     const params = [username, password]
     const result = await db.query(query, params)
-    console.log('localStrategyHandler', result)
+    //console.log('localStrategyHandler', result)
     if (result.rows.length < 1) {
       done(null, false)
     } else {
       done(null, { ...result.rows[0], id: result.rows[0].uid })
     }
   } catch (error) {
-    console.log(error)
+    //console.log(error)
     done(null, false)
   }
 }
 
 passport.serializeUser((user, done) => {
   // handle how to return the id of the user if given the user
+  //console.log('serialize', user)
   done(null, user.id)
 })
 
 passport.deserializeUser(async (id, done) => {
+  //console.log('deserialize', id)
   // find user and user id in database, and pass it second param
   const query = 'select uid, uname, uborn from users where uid = $1'
   const params = [id]
   const result = await db.query(query, params)
+  //console.log('result deserialize', result.rows)
   const user = { ...result.rows[0], id: result.rows[0].uid }
   done( null, user)
 })
@@ -125,11 +128,6 @@ app.use((req, res, next) => {
   next()
 })
 
-const localPassportAuthenticationDirective = {
-  successRedirect: '/api/v2/authorized',
-  failureRedirect: '/api/v2/unauthorized'
-}
-
 // web server routes
 app.get('/', async (req, res) => {
   res.send({
@@ -139,11 +137,45 @@ app.get('/', async (req, res) => {
   res.end()
 })
 
-app.post('/api/v2/authenticate', db.connected(), passport.authenticate('local', localPassportAuthenticationDirective))
+// passport will respond with 401 is auth fails
+app.post('/api/v2/authenticate', db.connected(), passport.authenticate('local'), async (req, res) => {
+  console.log('auth', req.user)
+  const { user } = req
+  const { uname } = user
+  res.redirect(`/api/v2/users/${uname}`)
+})
 
-app.get('/api/v2/authorized', authorized(), db.connected(), async (req, res) => {
+app.get('/api/v2/unauthenticate', (req, res) => {
+  req.logout()
   res.status(200)
   res.end()
+})
+
+const simpleQuery = async (req, res, query = '', params = []) => {
+  try {
+    const result = await db.query(query, params)
+    res.send(result.rows)
+    res.end()
+  } catch (error) {
+    console.log(error)
+    res.status(500)
+    res.send(error)
+    res.end()
+  }
+}
+
+app.get('/api/v2/users/:username', db.connected(), authorized(), (req, res) => {
+  const { params } = req
+  const { username } = params
+  simpleQuery(req, res, 'select uname, uborn from users where uname = $1', [username])
+})
+
+app.get('/api/v2/me', db.connected(), authorized(), (req, res) => {
+  const { user } = req
+  res.send([{
+    uname: user.uname,
+    uborn: user.uborn
+  }])
 })
 
 app.get('/api/v2/unauthorized', async (req, res) => {
@@ -162,7 +194,7 @@ app.get('/api/v2/traffic', db.connected(), async (req, res) => {
     res.send(traffic.rows)
     res.end()
   } catch (error) {
-    console.log(error)
+    //console.log(error)
     res.status(500)
     res.send(error)
     res.end()
@@ -178,7 +210,7 @@ app.post('/api/v2/traffic', db.connected(), async (req, res) => {
     res.status(201)
     res.end()
   } catch (error) {
-    console.log(error)
+    //console.log(error)
     res.status(500)
     res.send(error)
     res.end()
@@ -199,7 +231,7 @@ app.get('/api/v2/users/:username', db.connected(), async (req, res) => {
     }
     res.end()
   } catch (error) {
-    console.log(error)
+    //console.log(error)
     res.status(500)
     res.send(error)
     res.end()
@@ -220,17 +252,24 @@ app.post('/api/v2/register', db.connected(), upload.none(), async (req, res) => 
         reject(result)
       }
     })
-    await new Promise(async (resolve, reject) => {
-      const query = `insert into users (uname, uemail, upassword) values ($1, $2, crypt($3, gen_salt('bf'))) returning uname`
-      const parameters = [username, email, password]
-      const result = await db.query(query, parameters)
-      if (result.rows.length > 0) {
-        resolve(result)
-      } else {
-        reject(result)
+    const result = await new Promise(async (resolve, reject) => {
+      try {
+        const query = `insert into users (uname, uemail, upassword) values ($1, $2, crypt($3, gen_salt('bf'))) returning uname, uborn`
+        console.log('insert into user', username, email, password)
+        const parameters = [username, email, password]
+        const result = await db.query(query, parameters)
+        console.log('result', result.rows.length)
+        if (result.rows.length > 0) {
+          resolve(result)
+        } else {
+          reject(result)
+        }
+      } catch (error) {
+        reject(error)
       }
     })
     res.status(201)
+    res.send(result.rows)
     res.end()
   } catch (error) {
     console.log(error)

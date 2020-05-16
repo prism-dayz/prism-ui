@@ -1,5 +1,5 @@
 const LoginModal = {
-  props: ['header'],
+  props: ['header', 'uname'],
   data () {
       return {
           username: null,
@@ -8,6 +8,12 @@ const LoginModal = {
           success: false,
           error: false,
           busy: false
+      }
+  },
+  mounted () {
+      console.log(this)
+      if (this.uname) {
+          this.username = this.uname
       }
   },
   methods: {
@@ -36,12 +42,13 @@ const LoginModal = {
                   withCredentials: true,
                   emulateJSON: true
               })
+              const { body: users } = response
+              const user = users.reduce((a,c) => c, {})
               this.success = true
               this.busy = false
               setTimeout(() => {
-                  this.$router.push({
-                      path: '/dashboard'
-                  })
+                  this.$emit('authenticated', user)
+                  this.$parent.close()
               }, 1500)
           } catch (error) {
               console.log(error)
@@ -81,19 +88,9 @@ const LoginModal = {
                         required>
                     </b-input>
                 </b-field>
-
-                <b-checkbox style="margin-top:8px;" :disabled="busy || success">Remember me</b-checkbox>
-                <div style="height: 15px;
-                    padding-bottom: -10px;
-                    line-height: 9px;
-                    margin-bottom: 3px;"
-                    >
-                    <router-link to="/register" :disabled="busy || success">
-                        <span style="font-size:10px;">Register</span>
-                    </router-link>
-                </div>
             </section>
             <footer class="modal-card-foot">
+                <button class="button" type="button" @click="$parent.close()">Close</button>
                 <button class="button is-primary"
                     :class="{
                         'is-success': success,
