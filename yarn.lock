@@ -2855,6 +2855,11 @@ dir-glob@^2.0.0, dir-glob@^2.2.2:
   dependencies:
     path-type "^3.0.0"
 
+directory-tree@^2.2.4:
+  version "2.2.4"
+  resolved "https://registry.yarnpkg.com/directory-tree/-/directory-tree-2.2.4.tgz#6d5bd7d82e48378e256a1e87b678a43c50076e2e"
+  integrity sha512-2N43msQptKbi3WMfIs+U09yi6bfyKL+MWyj5VMj8t1F/Tx04bt1cn/EEIU3o1JBltlJk7NQnzOEuTNa/KQvbWA==
+
 discord.js@^12.2.0:
   version "12.2.0"
   resolved "https://registry.yarnpkg.com/discord.js/-/discord.js-12.2.0.tgz#31018732e42a495c92655055192221eab2ad11a9"
@@ -3470,6 +3475,11 @@ follow-redirects@^1.0.0:
   integrity sha512-KZm0V+ll8PfBrKwMzdo5D13b1bur9Iq9Zd/RMmAoQQcl2PxxFml8cxXPaaPYVbV0RjNjq1CU7zIzAOqtUPudmA==
   dependencies:
     debug "^3.0.0"
+
+font-awesome@^4.7.0:
+  version "4.7.0"
+  resolved "https://registry.yarnpkg.com/font-awesome/-/font-awesome-4.7.0.tgz#8fa8cf0411a1a31afd07b06d2902bb9fc815a133"
+  integrity sha1-j6jPBBGhoxr9B7BtKQK7n8gVoTM=
 
 for-in@^1.0.2:
   version "1.0.2"
@@ -7792,6 +7802,14 @@ vm-browserify@^1.0.1:
   resolved "https://registry.yarnpkg.com/vm-browserify/-/vm-browserify-1.1.2.tgz#78641c488b8e6ca91a75f511e7a3b32a86e5dda0"
   integrity sha512-2ham8XPWTONajOR0ohOKOHXkm3+gaBmGut3SRuu75xLd/RRaY6vqgh8NBYYk7+RW3u5AtzPQZG8F10LHkl0lAQ==
 
+vue-fontawesome@^0.0.2:
+  version "0.0.2"
+  resolved "https://registry.yarnpkg.com/vue-fontawesome/-/vue-fontawesome-0.0.2.tgz#b1b9c922652b9fb2d74fe66a28411628502bb3eb"
+  integrity sha1-sbnJImUrn7LXT+ZqKEEWKFArs+s=
+  dependencies:
+    font-awesome "^4.7.0"
+    vue "^2.1.8"
+
 vue-hot-reload-api@^2.3.0:
   version "2.3.4"
   resolved "https://registry.yarnpkg.com/vue-hot-reload-api/-/vue-hot-reload-api-2.3.4.tgz#532955cc1eb208a3d990b3a9f9a70574657e08f2"
@@ -7841,7 +7859,7 @@ vue-template-es2015-compiler@^1.9.0:
   resolved "https://registry.yarnpkg.com/vue-template-es2015-compiler/-/vue-template-es2015-compiler-1.9.1.tgz#1ee3bc9a16ecbf5118be334bb15f9c46f82f5825"
   integrity sha512-4gDntzrifFnCEvyoO8PqyJDmguXgVPxKiIxrBKjIowvL9l+N66196+72XVYR8BBf1Uv1Fgt3bGevJ+sEmxfZzw==
 
-vue@^2.6.11:
+vue@^2.1.8, vue@^2.6.11:
   version "2.6.11"
   resolved "https://registry.yarnpkg.com/vue/-/vue-2.6.11.tgz#76594d877d4b12234406e84e35275c6d514125c5"
   integrity sha512-VfPwgcGABbGAue9+sfrD4PuwFar7gPb1yl1UK1MwXoQPAw0BKSqWfoYCT/ThFrdEVWoI51dBuyCoiNU9bZDZxQ==

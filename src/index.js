@@ -60,10 +60,23 @@ const db = {
   }
 }
 
+const simpleQuery = async (req, res, query = '', params = []) => {
+  try {
+    const result = await db.query(query, params)
+    res.send(result.rows)
+    res.end()
+  } catch (error) {
+    console.log(error)
+    res.status(500)
+    res.send(error)
+    res.end()
+  }
+}
+
 try {
   db.connect()
 } catch (error) {
-  //console.log('could not connect to db', error)
+  console.log('could not connect to db', error)
 }
 
 // configure passport
@@ -137,7 +150,7 @@ app.get('/', async (req, res) => {
   res.end()
 })
 
-// passport will respond with 401 is auth fails
+// passport will respond with 401 if auth fails
 app.post('/api/v2/authenticate', db.connected(), passport.authenticate('local'), async (req, res) => {
   console.log('auth', req.user)
   const { user } = req
@@ -151,23 +164,17 @@ app.get('/api/v2/unauthenticate', (req, res) => {
   res.end()
 })
 
-const simpleQuery = async (req, res, query = '', params = []) => {
-  try {
-    const result = await db.query(query, params)
-    res.send(result.rows)
-    res.end()
-  } catch (error) {
-    console.log(error)
-    res.status(500)
-    res.send(error)
-    res.end()
-  }
-}
-
 app.get('/api/v2/users/:username', db.connected(), authorized(), (req, res) => {
   const { params } = req
   const { username } = params
-  simpleQuery(req, res, 'select uname, uborn from users where uname = $1', [username])
+  simpleQuery(req, res, "select uname, uborn, convert_from(decrypt(nakey::bytea, 'secret-key', 'bf'), 'utf-8') as nakey from users where uname = $1", [username])
+})
+
+app.put('/api/v2/users/:username', db.connected(), authorized(), upload.none(), (req, res) => {
+  const { params, body } = req
+  const { username } = params
+  const { nitradoApiKey } = body
+  simpleQuery(req, res, `update users set nakey = encrypt($1, 'secret-key', 'bf') where uname = $2`, [nitradoApiKey, username])
 })
 
 app.get('/api/v2/me', db.connected(), authorized(), (req, res) => {
