@@ -224,27 +224,6 @@ app.post('/api/v2/traffic', db.connected(), async (req, res) => {
   }
 })
 
-app.get('/api/v2/users/:username', db.connected(), async (req, res) => {
-  try {
-    const { params } = req
-    const { username } = params
-    const query = `select uname from users where uname = $1`
-    const parameters = [username]
-    const result = await db.query(query, parameters)
-    if (result.rows.length === 0) {
-      res.status(404)
-    } else {
-      res.status(200)
-    }
-    res.end()
-  } catch (error) {
-    //console.log(error)
-    res.status(500)
-    res.send(error)
-    res.end()
-  }
-})
-
 app.post('/api/v2/register', db.connected(), upload.none(), async (req, res) => {
   try {
     const { body } = req

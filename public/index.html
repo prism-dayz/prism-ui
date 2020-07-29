@@ -6,6 +6,11 @@
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <link rel="icon" href="<%= BASE_URL %>favicon.ico">
     <title><%= htmlWebpackPlugin.options.title %></title>
+    <link rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.6.0/dist/leaflet.css"
+      integrity="sha512-xwE/Az9zrjBIphAcBb3F6JVqxf46+CDLwfLMHloNu6KEQCAWi6HcDUbeOfBIptF7tcCzusKFjFw2yuvEpDL9wQ=="
+      crossorigin=""
+    />
   </head>
   <body>
     <noscript>
@@ -13,6 +18,1039 @@
     </noscript>
     <div id="app"></div>
     <!-- built files will be auto injected -->
+    <!-- izurvive deps -->
+    <script src="https://unpkg.com/leaflet@1.6.0/dist/leaflet.js"
+      integrity="sha512-gZwIG9x3wUXg2hdXF6+rVkLF/0Vi9U8D2Ntg4Ga5I5BZpVkVxlJWbSQtXPSiUTtC0TjtGOmxa1AJPuV0CPthew=="
+      crossorigin=""
+      >
+    </script>
+    <script
+        src="https://code.jquery.com/jquery-3.4.1.min.js"
+        integrity="sha256-CSXorXvZcTkaix6Yvo6HppcZGetbYMGWSFlBw8HfCJo="
+        crossorigin="anonymous">
+    </script>
+    <script src="deps1.js"
+      >
+    </script>
+    <script>
+      window.skinImageMap = {
+        "default_blue" : "images/marker/marker_skin_default_blue-128609dc.png",
+        "default_green" : "images/marker/marker_skin_default_green-94bba0fa.png",
+        "default_grey" : "images/marker/marker_skin_default_grey-1a08548d.png",
+        "default_orange" : "images/marker/marker_skin_default_orange-bfd4316a.png",
+        "default_red" : "images/marker/marker_skin_default_red-60f290ff.png",
+        "default_yellow" : "images/marker/marker_skin_default_yellow-914c179b.png",
+        "premium_legacy_blue" : "images/marker/marker_skin_premium_legacy_blue-b082ae3e.png",
+        "premium_legacy_green" : "images/marker/marker_skin_premium_legacy_green-3e5f9fb1.png",
+        "premium_legacy_grey" : "images/marker/marker_skin_premium_legacy_grey-e27f53ff.png",
+        "premium_legacy_orange" : "images/marker/marker_skin_premium_legacy_orange-8e85a2b3.png",
+        "premium_legacy_red" : "images/marker/marker_skin_premium_legacy_red-a22ba4fd.png",
+        "premium_legacy_yellow" : "images/marker/marker_skin_premium_legacy_yellow-f3efc2d2.png",
+        "premium_blue" : "images/marker/marker_skin_premium_blue-6dd582e3.png",
+        "premium_green" : "images/marker/marker_skin_premium_green-47750b25.png",
+        "premium_grey" : "images/marker/marker_skin_premium_grey-8286d12e.png",
+        "premium_orange" : "images/marker/marker_skin_premium_orange-7baabf13.png",
+        "premium_red" : "images/marker/marker_skin_premium_red-adf1b18a.png",
+        "premium_yellow" : "images/marker/marker_skin_premium_yellow-b3cfd481.png",
+        "christmas_santa_claus_blue" : "images/marker/marker_skin_christmas_santa_claus_blue-ea1250ca.png",
+        "christmas_santa_claus_green" : "images/marker/marker_skin_christmas_santa_claus_green-169904ed.png",
+        "christmas_santa_claus_grey" : "images/marker/marker_skin_christmas_santa_claus_grey-bcdeb10c.png",
+        "christmas_santa_claus_orange" : "images/marker/marker_skin_christmas_santa_claus_orange-da886e3b.png",
+        "christmas_santa_claus_red" : "images/marker/marker_skin_christmas_santa_claus_red-be751211.png",
+        "christmas_santa_claus_yellow" : "images/marker/marker_skin_christmas_santa_claus_yellow-e0afb82f.png",
+        "medic_blue" : "images/marker/marker_skin_medic_blue-e144e3d0.png",
+        "medic_green" : "images/marker/marker_skin_medic_green-4ea9a050.png",
+        "medic_grey" : "images/marker/marker_skin_medic_grey-255347ce.png",
+        "medic_orange" : "images/marker/marker_skin_medic_orange-6710f6ab.png",
+        "medic_red" : "images/marker/marker_skin_medic_red-16e9dcfa.png",
+        "medic_yellow" : "images/marker/marker_skin_medic_yellow-aab3360c.png",
+        "driver_blue" : "images/marker/marker_skin_driver_blue-69acf19a.png",
+        "driver_green" : "images/marker/marker_skin_driver_green-59e29f64.png",
+        "driver_grey" : "images/marker/marker_skin_driver_grey-f4a06b03.png",
+        "driver_orange" : "images/marker/marker_skin_driver_orange-f6affae4.png",
+        "driver_red" : "images/marker/marker_skin_driver_red-455615a6.png",
+        "driver_yellow" : "images/marker/marker_skin_driver_yellow-1bb09e4f.png",
+        "farmer_blue" : "images/marker/marker_skin_farmer_blue-ff05b00c.png",
+        "farmer_green" : "images/marker/marker_skin_farmer_green-3f6e4a81.png",
+        "farmer_grey" : "images/marker/marker_skin_farmer_grey-96e9ffef.png",
+        "farmer_orange" : "images/marker/marker_skin_farmer_orange-4da85840.png",
+        "farmer_red" : "images/marker/marker_skin_farmer_red-0dd8e300.png",
+        "farmer_yellow" : "images/marker/marker_skin_farmer_yellow-50c358c8.png",
+        "sniper_blue" : "images/marker/marker_skin_sniper_blue-6fca8f68.png",
+        "sniper_green" : "images/marker/marker_skin_sniper_green-83a3d4aa.png",
+        "sniper_grey" : "images/marker/marker_skin_sniper_grey-127d996c.png",
+        "sniper_orange" : "images/marker/marker_skin_sniper_orange-31a0b1b0.png",
+        "sniper_red" : "images/marker/marker_skin_sniper_red-e98fbda9.png",
+        "sniper_yellow" : "images/marker/marker_skin_sniper_yellow-1a6dc552.png",
+        "helicopter_blue" : "images/marker/marker_skin_helicopter_blue-b93d87c0.png",
+        "helicopter_green" : "images/marker/marker_skin_helicopter_green-30b3782e.png",
+        "helicopter_grey" : "images/marker/marker_skin_helicopter_grey-06616938.png",
+        "helicopter_orange" : "images/marker/marker_skin_helicopter_orange-2f8cea23.png",
+        "helicopter_red" : "images/marker/marker_skin_helicopter_red-0c353048.png",
+        "helicopter_yellow" : "images/marker/marker_skin_helicopter_yellow-a1598846.png",
+        "pilot_blue" : "images/marker/marker_skin_pilot_blue-6036d35a.png",
+        "pilot_green" : "images/marker/marker_skin_pilot_green-9c6590bb.png",
+        "pilot_grey" : "images/marker/marker_skin_pilot_grey-99178362.png",
+        "pilot_orange" : "images/marker/marker_skin_pilot_orange-d35ebd66.png",
+        "pilot_red" : "images/marker/marker_skin_pilot_red-8d591deb.png",
+        "pilot_yellow" : "images/marker/marker_skin_pilot_yellow-d7f869ee.png",
+        "bandit_blue" : "images/marker/marker_skin_bandit_blue-1bf01633.png",
+        "bandit_green" : "images/marker/marker_skin_bandit_green-8bdabb94.png",
+        "bandit_grey" : "images/marker/marker_skin_bandit_grey-4c539e6e.png",
+        "bandit_orange" : "images/marker/marker_skin_bandit_orange-d4e97cec.png",
+        "bandit_red" : "images/marker/marker_skin_bandit_red-d2a44ef5.png",
+        "bandit_yellow" : "images/marker/marker_skin_bandit_yellow-267a3514.png",
+        "hero_blue" : "images/marker/marker_skin_hero_blue-870cf198.png",
+        "hero_green" : "images/marker/marker_skin_hero_green-c39789f0.png",
+        "hero_grey" : "images/marker/marker_skin_hero_grey-d4e0191b.png",
+        "hero_orange" : "images/marker/marker_skin_hero_orange-973aa15f.png",
+        "hero_red" : "images/marker/marker_skin_hero_red-863b2a27.png",
+        "hero_yellow" : "images/marker/marker_skin_hero_yellow-f2f92899.png",
+        "survivor_blue" : "images/marker/marker_skin_survivor_blue-290b62d7.png",
+        "survivor_green" : "images/marker/marker_skin_survivor_green-5f0659c7.png",
+        "survivor_grey" : "images/marker/marker_skin_survivor_grey-2b697c6e.png",
+        "survivor_orange" : "images/marker/marker_skin_survivor_orange-f8503335.png",
+        "survivor_red" : "images/marker/marker_skin_survivor_red-4982281e.png",
+        "survivor_yellow" : "images/marker/marker_skin_survivor_yellow-c82d7ae4.png",
+        "zombie_blue" : "images/marker/marker_skin_zombie_blue-965ec0f5.png",
+        "zombie_green" : "images/marker/marker_skin_zombie_green-9ea36216.png",
+        "zombie_grey" : "images/marker/marker_skin_zombie_grey-93587716.png",
+        "zombie_orange" : "images/marker/marker_skin_zombie_orange-6b73a495.png",
+        "zombie_red" : "images/marker/marker_skin_zombie_red-7847a081.png",
+        "zombie_yellow" : "images/marker/marker_skin_zombie_yellow-e7fff226.png",
+      };
+      function readyLivonia() {
+          L.iZurvive({
+              "inherit_from": "base_standalone",
+              "features": {
+                  // "lootmap": true,
+                  "loc": true,
+                  // "measure": true,
+                  // "search": true,
+                  // "locationNameManager": true
+              },
+              "izMap": {
+                  "mapShortcut": "Livonia",
+                  "mapVersion": "1.0.72",
+                  "maxZoom": 7,
+                  "softMapBounds": {
+                      "southWest": [-83.67694304841552, -158.55468749999997],
+                      "northEast": [17.644022027872726, 71.3671875]
+                  },
+                  "title": "Livonia Terrain",
+                  "seoTitle": "DayZ Map: Livonia",
+                  "mapName": "Livonia-Top",
+                  "gameVersion": "DayZ 1.07",
+                  "views": [{
+                      "name": "Livonia-Top",
+                      "pageTitle": "iZurvive DayZ Map: Livonia",
+                      "shortname": "Livonia Terrain",
+                      "location": ".",
+                      "lineColor": "black"
+                  }, {
+                      "name": "Livonia-Sat",
+                      "pageTitle": "iZurvive DayZ Map: Livonia Satellite",
+                      "shortname": "Livonia Satellite",
+                      "location": "livoniaSat.html",
+                      "lineColor": "white"
+                  }]
+              },
+              "leafletMapOptions": {
+                  "maxZoom": 7,
+                  "ginfoControl": {
+                      "measure": {
+                          "enabled": true,
+                          "measureFactor": 0.3906677,
+                          "runningTimeFactor": 3,
+                          "sprintingTimeFactor": 5
+                      }
+                  }
+              },
+              "modules": {
+                  // "citySearch": {},
+                  "locSearch": {
+                      "coordFormatFunction": "coordFormatFunction",
+                      "maxZoomDiff": 0,
+                      "scalingParams": {
+                          "kx": 0.00031945948468785357,
+                          "ky": 0.00031945948468792187,
+                          "dx": 6399.609303461327,
+                          "dy": 6401.172089614661,
+                          "switchedCoords": false
+                      },
+                      "bounds": {
+                          "minX": 0,
+                          "maxX": 15360,
+                          "minY": 0,
+                          "maxY": 15360
+                      }
+                  },
+                  // "lootManager": {
+                  //     "zoomlevelScaling": {
+                  //         "7": 1.0,
+                  //         "6": 1.0,
+                  //         "5": 0.72,
+                  //         "4": 0.72,
+                  //         "3": 0.4,
+                  //         "2": 0.24,
+                  //         "1": 0.16
+                  //     },
+                  //     "maxZoom": 7,
+                  //     "categories": ["military", "crashsite", "medical", "water", "urban", "rural", "industrial", "coast", "vehicle", "basebuilding", "misc", "nature", "animal", "landmark"],
+                  //     "defaultCategories": ["military", "crashsite", "medical", "water", "urban", "rural", "industrial", "coast", "vehicle", "basebuilding", "misc", "nature", "animal", "landmark"],
+                  //     "lootgroupZIndex": {
+                  //         "landmark": 100000,
+                  //         "vehicle": -100,
+                  //         "military": 1000,
+                  //         "crashsite": -50,
+                  //         "medical": 100,
+                  //         "misc": -200,
+                  //         "nature": -1050,
+                  //         "animal": -1000
+                  //     },
+                  //     "overallFactor": 0.5,
+                  //     "individualScaleFactor": {
+                  //         "pond": 0.75,
+                  //         "water_pump": 0.75,
+                  //         "feedshack": 0.75,
+                  //         "military_various": 0.75,
+                  //         "garage": 0.8,
+                  //         "guardhouse": 0.75,
+                  //         "material_planks": 0.75
+                  //     },
+                  //     "lootspriteFile": "../images/sprite/looticons2-0e8f9d3d.png",
+                  //     "lootfilterSpritename": "lootfilter2-sprite",
+                  //     "defaultLootIconsSize": {
+                  //         "atc_tower": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 0]
+                  //         },
+                  //         "bar": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 75]
+                  //         },
+                  //         "barrack": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 150]
+                  //         },
+                  //         "bear_spawn": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 225]
+                  //         },
+                  //         "boathouse": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 300]
+                  //         },
+                  //         "camp": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 375]
+                  //         },
+                  //         "castle": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 450]
+                  //         },
+                  //         "chicken_spawn": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 525]
+                  //         },
+                  //         "church": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 600]
+                  //         },
+                  //         "civilian_sedan": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 675]
+                  //         },
+                  //         "civilian_sedan_2": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 750]
+                  //         },
+                  //         "cow_spawn": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 825]
+                  //         },
+                  //         "crashsite": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 900]
+                  //         },
+                  //         "crashsite_permanent": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 975]
+                  //         },
+                  //         "deer_spawn": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 1050]
+                  //         },
+                  //         "deerstand": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 1125]
+                  //         },
+                  //         "farm": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 1200]
+                  //         },
+                  //         "feedshack": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 1275]
+                  //         },
+                  //         "firestation": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 1350]
+                  //         },
+                  //         "fruit_tree": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 1425]
+                  //         },
+                  //         "garage": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 1500]
+                  //         },
+                  //         "gas_station": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 1575]
+                  //         },
+                  //         "generalstore": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 1650]
+                  //         },
+                  //         "guardhouse": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 1725]
+                  //         },
+                  //         "helicopter_crashsite": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 1800]
+                  //         },
+                  //         "hospital": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 1875]
+                  //         },
+                  //         "house": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 1950]
+                  //         },
+                  //         "house_piano": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 2025]
+                  //         },
+                  //         "lighthouse": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 2100]
+                  //         },
+                  //         "lunapark": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 2175]
+                  //         },
+                  //         "material_planks": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 2250]
+                  //         },
+                  //         "medical_center": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 2325]
+                  //         },
+                  //         "medical_tent": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 2400]
+                  //         },
+                  //         "military_various": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 2475]
+                  //         },
+                  //         "misc": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 2550]
+                  //         },
+                  //         "office": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 2625]
+                  //         },
+                  //         "offroad_hatchback": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 2700]
+                  //         },
+                  //         "offroad_hatchback_2": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 2775]
+                  //         },
+                  //         "pig_spawn": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 2850]
+                  //         },
+                  //         "player_spawn": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 2925]
+                  //         },
+                  //         "police_car_crashsite": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 3000]
+                  //         },
+                  //         "police_station": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 3075]
+                  //         },
+                  //         "pond": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 3150]
+                  //         },
+                  //         "prison": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 3225]
+                  //         },
+                  //         "rabbit_spawn": {
+                  //             "icn_size": [75, 70],
+                  //             "offset": [0, 3300]
+                  //         },
+                  //         "radio_tower": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 3370]
+                  //         },
+                  //         "school": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 3445]
+                  //         },
+                  //         "sheep_spawn": {
+                  //             "icn_size": [75, 70],
+                  //             "offset": [0, 3520]
+                  //         },
+                  //         "shipwreck": {
+                  //             "icn_size": [75, 74],
+                  //             "offset": [0, 3590]
+                  //         },
+                  //         "small_boat_crashsite": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 3664]
+                  //         },
+                  //         "transit_bus": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 3739]
+                  //         },
+                  //         "v3s": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 3814]
+                  //         },
+                  //         "v3s_cargo": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 3889]
+                  //         },
+                  //         "watch_tower": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 3964]
+                  //         },
+                  //         "water_pump": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 4039]
+                  //         },
+                  //         "water_tower": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 4114]
+                  //         },
+                  //         "wild_boar_spawn": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 4189]
+                  //         },
+                  //         "wolve_spawn": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 4264]
+                  //         }
+                  //     },
+                  //     "subcatnames": {
+                  //         "police_car_crashsite": "Police Car",
+                  //         "helicopter_crashsite": "Helicopter",
+                  //         "small_boat_crashsite": "Boat",
+                  //         "civilian_sedan": "Olga 24",
+                  //         "civilian_sedan_2": "Sarka 120",
+                  //         "offroad_hatchback": "ADA 4x4",
+                  //         "offroad_hatchback_2": "Gunter 2",
+                  //         "transit_bus": "Transit Bus",
+                  //         "chicken_spawn": "Chicken",
+                  //         "cow_spawn": "Cow",
+                  //         "deer_spawn": "Deer",
+                  //         "pig_spawn": "Pig",
+                  //         "rabbit_spawn": "Rabbit",
+                  //         "wild_boar_spawn": "Wild Boar",
+                  //         "wolve_spawn": "Wolf",
+                  //         "bear_spawn": "Bear",
+                  //         "sheep_spawn": "Sheep",
+                  //         "material_planks": "Planks",
+                  //         "lunapark": "Amusement Park"
+                  //     }
+                  // },
+                  // "markerManager": {
+                  //     "zoomlevels": {
+                  //         "70": [7],
+                  //         "55": [6],
+                  //         "38": [5],
+                  //         "27": [4],
+                  //         "23": [3],
+                  //         "20": [2],
+                  //         "17": [0, 1]
+                  //     }
+                  // }
+              },
+              "general": {
+                  "game": "DayZ & ARMA",
+                  "title": "iZurvive DayZ & ARMA Map",
+                  "apps": {
+                      "ios": {
+                          "url": "https://itunes.apple.com/app/izurvive-for-dayz/id585632597?mt=8",
+                          "app_id": "585632597"
+                      },
+                      "android": {
+                          "url": "https://play.google.com/store/apps/details?id=com.innovaptor.izurvive",
+                          "app_id": "com.innovaptor.izurvive"
+                      },
+                      "web": {
+                          "url": "https://dayz.ginfo.gg",
+                          "description": "iZurvive provides you with the best maps for DayZ Standalone (up to date for DayZ 1.05 Release Version for PC, PS4 and Xbox) with loot positions, lets you place tactical markers on it and automatically shares those markers with the friends in your group.",
+                          "keywords": "dayz, 1.05, release, map, loot, standalone, satellite, lootmap, chernarus, isurvive, origins, arma, gaming, play, zombies, arcade, shooter, survival, pc, xbox, ps4, playstation",
+                          "image": "https://s3.amazonaws.com/ginfo-maps/preview/card_dayz.jpg",
+                          "logo": "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"
+                      }
+                  },
+                  "sections": {
+                      "wiki": true,
+                      "communities": true,
+                      "info": {
+                          "about": true,
+                          "tutorial": true,
+                          "feedback": true,
+                          "attributions": true,
+                          "changelog": true
+                      },
+                      "groups": true,
+                      "serverlogs": true
+                  }
+              },
+              "syncServer": {
+                  "apiv1": {
+                      "endpointHttps": "https://izurvive-api.herokuapp.com",
+                      "endpointVersion": "1.3"
+                  },
+                  "apiv2": {
+                      "endpoint": ""
+                  }
+              },
+              "mapHosting": {
+                  "mapDirectory": "//maps.izurvive.com/maps"
+              },
+              "assets": {
+                  "imageDirectory": "izurvive"
+              },
+              "social": {
+                  "feedbackMailAddress": "support@izurvive.com",
+                  "feedbackName": "iZurvive",
+                  "facebook": "https://www.facebook.com/izurvive",
+                  "twitter": "https://twitter.com/ginfo_gg",
+                  "twitterHandle": "@ginfo_gg"
+              },
+              "ads": {
+                  "gad": {
+                      "mapBannerAdSlot": "3293896503"
+                  }
+              },
+              "analytics": {
+                  "ga": {
+                      "propertyId": "UA-35768895-5"
+                  }
+              },
+              "otherProducts": [{
+                  "name": "Playerunknown's Battlegrounds",
+                  "link": "https://pubg.ginfo.gg"
+              }, {
+                  "name": "SCUM",
+                  "link": "https://scum.ginfo.gg"
+              }, {
+                  "name": "Fallout 76",
+                  "link": "https://fallout76.ginfo.gg"
+              }, {
+                  "name": "Conan Exiles",
+                  "link": "https://conanexiles.ginfo.gg"
+              }, {
+                  "name": "Fortnite",
+                  "link": "https://fortnite.ginfo.gg"
+              }, {
+                  "name": "Ark",
+                  "link": "https://ark.ginfo.gg"
+              }, {
+                  "name": "Citadel: Forged with fire",
+                  "link": "https://citadel.ginfo.gg"
+              }, {
+                  "name": "H1Z1",
+                  "link": "https://h1z1.ginfo.gg"
+              }, {
+                  "name": "Overwatch",
+                  "link": "https://overwatch.ginfo.gg"
+              }]
+          });
+      }
+
+      function readyChernarus() {
+          L.iZurvive({
+              "inherit_from": "base_standalone",
+              "features": {
+                  // "lootmap": true,
+                  "loc": true,
+                  // "measure": true,
+                  // "search": true,
+                  // "locationNameManager": true
+              },
+              "izMap": {
+                  "mapShortcut": "CSA",
+                  "mapVersion": "1.12.0",
+                  "maxZoom": 7,
+                  "softMapBounds": {
+                      "southWest": [-83.67694304841552, -158.55468749999997],
+                      "northEast": [17.644022027872726, 71.3671875]
+                  },
+                  "title": "Chernarus+ Terrain",
+                  "seoTitle": "DayZ Map: Chernarus+ Topographic Map",
+                  "mapName": "CH-Top",
+                  "gameVersion": "DayZ 1.07",
+                  "views": [{
+                      "name": "CH-Top",
+                      "pageTitle": "iZurvive DayZ Map: Chernarus Plus Topographic Map",
+                      "shortname": "Terrain",
+                      "location": ".",
+                      "lineColor": "black"
+                  }, {
+                      "name": "CH-Sat",
+                      "pageTitle": "iZurvive DayZ Map: Chernarus Plus Satellite Map",
+                      "shortname": "Satellite",
+                      "location": "chernarusplussatmap.html",
+                      "lineColor": "white"
+                  }]
+              },
+              "leafletMapOptions": {
+                  "maxZoom": 7,
+                  "ginfoControl": {
+                      "measure": {
+                          "enabled": true,
+                          "measureFactor": 0.486091332,
+                          "runningTimeFactor": 3,
+                          "sprintingTimeFactor": 5
+                      }
+                  }
+              },
+              "modules": {
+                  // "citySearch": {},
+                  "locSearch": {
+                      "coordFormatFunction": "coordFormatFunction",
+                      "maxZoomDiff": 0,
+                      "scalingParams": {
+                          "kx": 0.00039746552365541434,
+                          "ky": 0.00039747543741573465,
+                          "dx": 7961.677966525134,
+                          "dy": 7961.958744725942,
+                          "switchedCoords": false
+                      },
+                      "bounds": {
+                          "minX": 0,
+                          "maxX": 15360,
+                          "minY": 0,
+                          "maxY": 15360
+                      }
+                  },
+                  // "lootManager": {
+                  //     "zoomlevelScaling": {
+                  //         "7": 1.0,
+                  //         "6": 1.0,
+                  //         "5": 0.72,
+                  //         "4": 0.72,
+                  //         "3": 0.4,
+                  //         "2": 0.24,
+                  //         "1": 0.16
+                  //     },
+                  //     "maxZoom": 7,
+                  //     "categories": ["military", "crashsite", "medical", "water", "urban", "rural", "industrial", "coast", "vehicle", "basebuilding", "misc", "nature", "animal", "landmark"],
+                  //     "defaultCategories": ["military", "crashsite", "medical", "water", "urban", "rural", "industrial", "coast", "vehicle", "basebuilding", "misc", "nature", "animal", "landmark"],
+                  //     "lootgroupZIndex": {
+                  //         "landmark": 100000,
+                  //         "vehicle": -100,
+                  //         "military": 1000,
+                  //         "crashsite": -50,
+                  //         "medical": 100,
+                  //         "misc": -200,
+                  //         "nature": -1050,
+                  //         "animal": -1000
+                  //     },
+                  //     "overallFactor": 0.5,
+                  //     "individualScaleFactor": {
+                  //         "pond": 0.75,
+                  //         "water_pump": 0.75,
+                  //         "feedshack": 0.75,
+                  //         "military_various": 0.75,
+                  //         "garage": 0.8,
+                  //         "guardhouse": 0.75,
+                  //         "material_planks": 0.75
+                  //     },
+                  //     "lootspriteFile": "images/sprite/looticons2-0e8f9d3d.png",
+                  //     "lootfilterSpritename": "lootfilter2-sprite",
+                  //     "defaultLootIconsSize": {
+                  //         "atc_tower": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 0]
+                  //         },
+                  //         "bar": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 75]
+                  //         },
+                  //         "barrack": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 150]
+                  //         },
+                  //         "bear_spawn": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 225]
+                  //         },
+                  //         "boathouse": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 300]
+                  //         },
+                  //         "camp": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 375]
+                  //         },
+                  //         "castle": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 450]
+                  //         },
+                  //         "chicken_spawn": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 525]
+                  //         },
+                  //         "church": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 600]
+                  //         },
+                  //         "civilian_sedan": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 675]
+                  //         },
+                  //         "civilian_sedan_2": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 750]
+                  //         },
+                  //         "cow_spawn": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 825]
+                  //         },
+                  //         "crashsite": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 900]
+                  //         },
+                  //         "crashsite_permanent": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 975]
+                  //         },
+                  //         "deer_spawn": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 1050]
+                  //         },
+                  //         "deerstand": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 1125]
+                  //         },
+                  //         "farm": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 1200]
+                  //         },
+                  //         "feedshack": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 1275]
+                  //         },
+                  //         "firestation": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 1350]
+                  //         },
+                  //         "fruit_tree": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 1425]
+                  //         },
+                  //         "garage": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 1500]
+                  //         },
+                  //         "gas_station": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 1575]
+                  //         },
+                  //         "generalstore": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 1650]
+                  //         },
+                  //         "guardhouse": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 1725]
+                  //         },
+                  //         "helicopter_crashsite": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 1800]
+                  //         },
+                  //         "hospital": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 1875]
+                  //         },
+                  //         "house": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 1950]
+                  //         },
+                  //         "house_piano": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 2025]
+                  //         },
+                  //         "lighthouse": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 2100]
+                  //         },
+                  //         "lunapark": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 2175]
+                  //         },
+                  //         "material_planks": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 2250]
+                  //         },
+                  //         "medical_center": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 2325]
+                  //         },
+                  //         "medical_tent": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 2400]
+                  //         },
+                  //         "military_various": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 2475]
+                  //         },
+                  //         "misc": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 2550]
+                  //         },
+                  //         "office": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 2625]
+                  //         },
+                  //         "offroad_hatchback": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 2700]
+                  //         },
+                  //         "offroad_hatchback_2": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 2775]
+                  //         },
+                  //         "pig_spawn": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 2850]
+                  //         },
+                  //         "player_spawn": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 2925]
+                  //         },
+                  //         "police_car_crashsite": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 3000]
+                  //         },
+                  //         "police_station": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 3075]
+                  //         },
+                  //         "pond": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 3150]
+                  //         },
+                  //         "prison": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 3225]
+                  //         },
+                  //         "rabbit_spawn": {
+                  //             "icn_size": [75, 70],
+                  //             "offset": [0, 3300]
+                  //         },
+                  //         "radio_tower": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 3370]
+                  //         },
+                  //         "school": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 3445]
+                  //         },
+                  //         "sheep_spawn": {
+                  //             "icn_size": [75, 70],
+                  //             "offset": [0, 3520]
+                  //         },
+                  //         "shipwreck": {
+                  //             "icn_size": [75, 74],
+                  //             "offset": [0, 3590]
+                  //         },
+                  //         "small_boat_crashsite": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 3664]
+                  //         },
+                  //         "transit_bus": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 3739]
+                  //         },
+                  //         "v3s": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 3814]
+                  //         },
+                  //         "v3s_cargo": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 3889]
+                  //         },
+                  //         "watch_tower": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 3964]
+                  //         },
+                  //         "water_pump": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 4039]
+                  //         },
+                  //         "water_tower": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 4114]
+                  //         },
+                  //         "wild_boar_spawn": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 4189]
+                  //         },
+                  //         "wolve_spawn": {
+                  //             "icn_size": [75, 75],
+                  //             "offset": [0, 4264]
+                  //         }
+                  //     },
+                  //     "subcatnames": {
+                  //         "police_car_crashsite": "Police Car",
+                  //         "helicopter_crashsite": "Helicopter",
+                  //         "small_boat_crashsite": "Boat",
+                  //         "civilian_sedan": "Olga 24",
+                  //         "civilian_sedan_2": "Sarka 120",
+                  //         "offroad_hatchback": "ADA 4x4",
+                  //         "offroad_hatchback_2": "Gunter 2",
+                  //         "transit_bus": "Transit Bus",
+                  //         "chicken_spawn": "Chicken",
+                  //         "cow_spawn": "Cow",
+                  //         "deer_spawn": "Deer",
+                  //         "pig_spawn": "Pig",
+                  //         "rabbit_spawn": "Rabbit",
+                  //         "wild_boar_spawn": "Wild Boar",
+                  //         "wolve_spawn": "Wolf",
+                  //         "bear_spawn": "Bear",
+                  //         "sheep_spawn": "Sheep",
+                  //         "material_planks": "Planks",
+                  //         "lunapark": "Amusement Park"
+                  //     }
+                  // },
+                  // "markerManager": {
+                  //     "zoomlevels": {
+                  //         "70": [7],
+                  //         "55": [6],
+                  //         "38": [5],
+                  //         "27": [4],
+                  //         "23": [3],
+                  //         "20": [2],
+                  //         "17": [0, 1]
+                  //     }
+                  // }
+              },
+              "general": {
+                  "game": "DayZ & ARMA",
+                  "title": "iZurvive DayZ & ARMA Map",
+                  "apps": {
+                      "ios": {
+                          "url": "https://itunes.apple.com/app/izurvive-for-dayz/id585632597?mt=8",
+                          "app_id": "585632597"
+                      },
+                      "android": {
+                          "url": "https://play.google.com/store/apps/details?id=com.innovaptor.izurvive",
+                          "app_id": "com.innovaptor.izurvive"
+                      },
+                      "web": {
+                          "url": "https://dayz.ginfo.gg",
+                          "description": "iZurvive provides you with the best maps for DayZ Standalone (up to date for DayZ 1.05 Release Version for PC, PS4 and Xbox) with loot positions, lets you place tactical markers on it and automatically shares those markers with the friends in your group.",
+                          "keywords": "dayz, 1.05, release, map, loot, standalone, satellite, lootmap, chernarus, isurvive, origins, arma, gaming, play, zombies, arcade, shooter, survival, pc, xbox, ps4, playstation",
+                          "image": "https://s3.amazonaws.com/ginfo-maps/preview/card_dayz.jpg",
+                          "logo": "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"
+                      }
+                  },
+                  "sections": {
+                      "wiki": true,
+                      "communities": true,
+                      "info": {
+                          "about": true,
+                          "tutorial": true,
+                          "feedback": true,
+                          "attributions": true,
+                          "changelog": true
+                      },
+                      "groups": true,
+                      "serverlogs": true
+                  }
+              },
+              "syncServer": {
+                  "apiv1": {
+                      "endpointHttps": "https://izurvive-api.herokuapp.com",
+                      "endpointVersion": "1.3"
+                  },
+                  "apiv2": {
+                      "endpoint": ""
+                  }
+              },
+              "mapHosting": {
+                  "mapDirectory": "//maps.izurvive.com/maps"
+              },
+              "assets": {
+                  "imageDirectory": "izurvive"
+              },
+              "social": {
+                  "feedbackMailAddress": "support@izurvive.com",
+                  "feedbackName": "iZurvive",
+                  "facebook": "https://www.facebook.com/izurvive",
+                  "twitter": "https://twitter.com/ginfo_gg",
+                  "twitterHandle": "@ginfo_gg"
+              },
+              "ads": {
+                  "gad": {
+                      "mapBannerAdSlot": "3293896503"
+                  }
+              },
+              "analytics": {
+                  "ga": {
+                      "propertyId": "UA-35768895-5"
+                  }
+              },
+              "otherProducts": [{
+                  "name": "Playerunknown's Battlegrounds",
+                  "link": "https://pubg.ginfo.gg"
+              }, {
+                  "name": "SCUM",
+                  "link": "https://scum.ginfo.gg"
+              }, {
+                  "name": "Fallout 76",
+                  "link": "https://fallout76.ginfo.gg"
+              }, {
+                  "name": "Conan Exiles",
+                  "link": "https://conanexiles.ginfo.gg"
+              }, {
+                  "name": "Fortnite",
+                  "link": "https://fortnite.ginfo.gg"
+              }, {
+                  "name": "Ark",
+                  "link": "https://ark.ginfo.gg"
+              }, {
+                  "name": "Citadel: Forged with fire",
+                  "link": "https://citadel.ginfo.gg"
+              }, {
+                  "name": "H1Z1",
+                  "link": "https://h1z1.ginfo.gg"
+              }, {
+                  "name": "Overwatch",
+                  "link": "https://overwatch.ginfo.gg"
+              }]
+          });
+      }
+    </script>
     <script src="https://kit.fontawesome.com/77cc9993ae.js" crossorigin="anonymous"></script>
     <script src="vendor/ace.js"></script>
     <script src="vendor/worker-xml.js"></script>
