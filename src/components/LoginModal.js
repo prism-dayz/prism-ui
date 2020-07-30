@@ -2,6 +2,7 @@ const LoginModal = {
   props: ['header', 'uname'],
   data () {
       return {
+          rememberMe: false,
           username: null,
           password: null,
           ok: true,
@@ -28,13 +29,14 @@ const LoginModal = {
               return 'is-warning'
           }
       },
-      async onLogin (event, username, password) {
+      async onLogin (event, username, password, rememberMe) {
           event.preventDefault()
           this.busy = true
           this.error = false
           this.success = false
           try {
               const body = {
+                  remember_me: rememberMe,
                   username: username,
                   password
               }
@@ -88,6 +90,7 @@ const LoginModal = {
                         required>
                     </b-input>
                 </b-field>
+
             </section>
             <footer class="modal-card-foot">
                 <button class="button" type="button" @click="$parent.close()">Close</button>
@@ -97,7 +100,7 @@ const LoginModal = {
                         'is-danger': error,
                         'is-warning': busy
                     }"
-                    @click="onLogin($event, username, password)"
+                    @click="onLogin($event, username, password, rememberMe)"
                     style="width:75px;"
                     :disabled="busy || success">
                     <span v-if="!busy && !success && ok">Login</span>
@@ -105,6 +108,9 @@ const LoginModal = {
                     <span v-if="!busy && success"><i class="fa fa-check" /></span>
                     <span v-if="!busy && !success && error && !ok"><i class="fa fa-times" /></span>
                 </button>
+                <b-checkbox v-model="rememberMe">
+                    Remember me
+                </b-checkbox>
             </footer>
         </div>
     </form>

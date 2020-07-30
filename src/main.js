@@ -11,7 +11,13 @@ Vue.config.productionTip = false
 Vue.use(Buefy, {
   defaultIconPack: 'fas'
 })
+
 Vue.use(VueResource)
+
+Vue.http.interceptors.push((request, next) => {
+  request.credentials = true
+  next()
+})
 
 new Vue({
   router,

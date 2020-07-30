@@ -27,35 +27,6 @@ const AccountModal = {
               return 'is-warning'
           }
       },
-      async fetchAccount () {
-          this.busy = true
-          this.error = false
-          this.success = false
-          try {
-              const { nitradoApiKey } = this
-              const body = {
-                  nitradoApiKey
-              }
-              const response = await this.$http.get(`http://localhost:8001/api/v2/users/${this.username}`, body, {
-                  withCredentials: true,
-                  emulateJSON: true
-              })
-              this.success = true
-              this.busy = false
-              setTimeout(() => {
-                  this.$emit('account')
-                  this.$parent.close()
-              }, 1500)
-          } catch (error) {
-              console.log(error)
-              this.ok = false
-              this.error = true
-              this.busy = false
-              setTimeout(() => {
-                  this.ok = true
-              }, 1500)
-          }
-      },
       async onAccount (event, nitradoApiKey) {
           event.preventDefault()
           this.busy = true

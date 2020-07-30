@@ -17,7 +17,8 @@ const LoginButton = {
       this.success = false
       try {
         const response = await this.$http.get('http://localhost:8001/api/v2/me', null, {
-          withCredentials: true
+          withCredentials: true,
+          emulateJSON: true
         })
         this.success = true
         this.busy = false

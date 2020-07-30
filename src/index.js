@@ -7,13 +7,18 @@ const pg = require('pg')
 const request = require('request')
 const ws = require('ws')
 const passport = require('passport')
+const cookieParser = require('cookie-parser')
 const { Strategy: LocalStrategy } = require('passport-local')
+const { Strategy: RememberMeStrategy } = require('passport-remember-me')
+const PostgreSqlStore = require('connect-pg-simple')(session)
 const { version } = require('../package.json')
 const discord = require('discord.js')
+const utils = require('./utils')
 
 // helpers functions
 const authorized = () => {
   return (req, res, next) => {
+    console.log(req.body, req.isAuthenticated())
     if (req.isAuthenticated()) {
       next()
     } else {
@@ -41,6 +46,7 @@ const dbClient = new Client({
 const db = {
   $connected: false,
   query (query, params) {
+    console.log(query, params)
     return dbClient.query(query, params)
   },
   async connect () {
@@ -85,10 +91,10 @@ const localStrategyConfig = {
   passwordField: 'password'
 }
 
-const localStrategyHandler = async (username, password, done) => {
+const localStrategyHandler = async (username, password, callback) => {
   //console.log('local_strategy', username, password)
   // given the username and password from a request, see if it's valid in a db for instance
-  // there are three variations of ways to call done() based on db query
+  // there are three variations of ways to call callback() based on db query
   // insert into users (uname, upassword) values ('rainbows@clouds.io', crypt('sugarcane', gen_salt('bf')))
   try {
     const query = 'select uid, uname, uborn from users where uname = $1 and upassword = crypt($2, upassword)'
@@ -96,13 +102,53 @@ const localStrategyHandler = async (username, password, done) => {
     const result = await db.query(query, params)
     //console.log('localStrategyHandler', result)
     if (result.rows.length < 1) {
-      done(null, false)
+      callback(null, false)
     } else {
-      done(null, { ...result.rows[0], id: result.rows[0].uid })
+      callback(null, { ...result.rows[0], id: result.rows[0].uid })
     }
   } catch (error) {
     //console.log(error)
-    done(null, false)
+    callback(null, false)
+  }
+}
+
+const rememberMeStrategyHandler = async (token, callback) => {
+  try {
+    const query = `select uid from tokens where ttoken = crypt($1, ttoken)`
+    const parameters = [token]
+    const result = await db.query(query, parameters)
+    if (result.rows.length < 1) {
+      callback(null, false)
+    } else {
+      const uid = result.rows[0].uid
+      const q = `delete from tokens where ttoken = crypt($1, ttoken)`
+      const p = [token]
+      const r = await db.query(q, p)
+      const q1 = `select uname, uborn from users where uid = $1`
+      const p1 = [uid]
+      const r1 = await db.query(q1, p1)
+      if (r1.rows.length < 1) {
+        callback(null, false)
+      } else {
+        callback(null, { ...r1.rows[0], id: uid })
+      }
+    }
+  } catch (e) {
+    callback(e)
+  }
+}
+
+const issueTokenHandler = async (user, callback) => {
+  var token = utils.randomString(64)
+  const { id } = user
+  try {
+    // has to be insert
+    const query = `insert into tokens (ttoken, uid) values (encrypt($1, 'secret-key', 'bf'), $2)`
+    const parameters = [token, id]
+    await db.query(query, parameters)
+    callback(null, token)
+  } catch (e) {
+    callback(e)
   }
 }
 
@@ -120,15 +166,23 @@ passport.deserializeUser(async (id, done) => {
   const result = await db.query(query, params)
   //console.log('result deserialize', result.rows)
   const user = { ...result.rows[0], id: result.rows[0].uid }
-  done( null, user)
+  done(null, user)
 })
 
+// configure passport strategies
 passport.use(new LocalStrategy(localStrategyConfig, localStrategyHandler))
+passport.use(new RememberMeStrategy(rememberMeStrategyHandler, issueTokenHandler))
 
 // configure web server
+app.use(cookieParser())
 app.use(express.urlencoded({ extended: true }))
 app.use(session({
+  store: new PostgreSqlStore({
+    conString: `postgresql://methanogen:methane@localhost:5432/archaeon`
+  }),
   secret: 'sbyr395sriby9353597isr3rsyib5s7ryir7sb7isb9fh6sh8fgj568s65r3ybd5b68fgdjr',
+  resave: false,
+  cookie: { maxAge: 30 * 24 * 60 * 60 * 1000 }, // 30 days
   resave: true,
   saveUninitialized: true
 }))
@@ -136,6 +190,7 @@ app.use(cors({ credentials: true, origin: `http://localhost:8080` }))
 app.use(morgan('tiny'))
 app.use(passport.initialize())
 app.use(passport.session())
+app.use(passport.authenticate('remember-me'))
 app.use((req, res, next) => {
   res.set('X-Archaeon-API-Version', `v${version}`)
   next()
@@ -151,7 +206,25 @@ app.get('/', async (req, res) => {
 })
 
 // passport will respond with 401 if auth fails
-app.post('/api/v2/authenticate', db.connected(), passport.authenticate('local'), async (req, res) => {
+app.post('/api/v2/authenticate', db.connected(), passport.authenticate('local'), async (req, res, next) => {
+  const { body } = req
+  const { remember_me } = body
+  console.log('remember_me', remember_me)
+  if (remember_me === true) {
+    const { user } = req
+    issueTokenHandler(user, (error, token) => {
+      if (error) {
+        return next(error)
+      } {
+        res.cookie('remember_me', token, { path: '/', httpOnly: true, maxAge: 604800000 })
+        return next()
+      }
+    })
+  } else {
+    console.log('not creating a cookie')
+    return next()
+  }
+}, async (req, res) => {
   console.log('auth', req.user)
   const { user } = req
   const { uname } = user
@@ -159,6 +232,7 @@ app.post('/api/v2/authenticate', db.connected(), passport.authenticate('local'),
 })
 
 app.get('/api/v2/unauthenticate', (req, res) => {
+  res.clearCookie('remember_me')
   req.logout()
   res.status(200)
   res.end()
@@ -179,10 +253,8 @@ app.put('/api/v2/users/:username', db.connected(), authorized(), upload.none(), 
 
 app.get('/api/v2/me', db.connected(), authorized(), (req, res) => {
   const { user } = req
-  res.send([{
-    uname: user.uname,
-    uborn: user.uborn
-  }])
+  const { uname } = user
+  res.redirect(`/api/v2/users/${uname}`)
 })
 
 app.get('/api/v2/unauthorized', async (req, res) => {

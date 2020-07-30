@@ -27,3 +27,23 @@ create table traffic (
   tip varchar not null,
   tborn date not null default now()
 );
+
+create table tokens (
+  tid serial primary key not null,
+  ttoken varchar not null,
+  uid varchar not null
+);
+
+-- https://raw.githubusercontent.com/voxpelli/node-connect-pg-simple/master/table.sql
+-- tables and ect for sessions with express
+
+CREATE TABLE "session" (
+  "sid" varchar NOT NULL COLLATE "default",
+	"sess" json NOT NULL,
+	"expire" timestamp(6) NOT NULL
+)
+WITH (OIDS=FALSE);
+
+ALTER TABLE "session" ADD CONSTRAINT "session_pkey" PRIMARY KEY ("sid") NOT DEFERRABLE INITIALLY IMMEDIATE;
+
+CREATE INDEX "IDX_session_expire" ON "session" ("expire");
