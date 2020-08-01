@@ -14,11 +14,14 @@
             <template slot="end">
                 <b-navbar-item tag="div">
                     <div class="buttons">
-                      <b-button v-if="user.uname" class="button is-light" :loading="busy" @click="isAccountModalActive = !isAccountModalActive">
+                      <b-button v-if="user.uname" class="button is-light" :loading="busy" @click="isAccountModalActive = !isAccountModalActive" outlined>
                         <i class="fa fa-cog" /> &nbsp; {{user.uname}}
                       </b-button>
-                      <b-button @click="open = true" class="button is-danger">
-                        <i class="fa fa-tools" /> &nbsp; Panel
+                      <b-button @click="open = true" class="button is-warning">
+                        <i class="fa fa-tools" /> &nbsp; Mission Editor
+                      </b-button>
+                      <b-button v-if="user.uname" @click="openPlayerStats = true" class="button is-success">
+                        <i class="fa fa-tools" /> &nbsp; Player Stats
                       </b-button>
                       <a v-if="!user.uname" class="button is-primary" @click="isRegisterModalActive = !isRegisterModalActive">
                           <strong>Register</strong>
@@ -304,6 +307,57 @@
 
       </div>
     </b-sidebar>
+
+    <b-sidebar
+      class="archaeon-panel"
+      type="is-light"
+      :fullheight="fullheight"
+      :fullwidth="fullwidth"
+      :overlay="overlay"
+      :right="right"
+      :open.sync="openPlayerStats"
+      :can-cancel="false"
+    >
+      <div class="p-1">
+
+        <!-- ROW (TOP TOOL BAR) -->
+        <div class="menu">
+
+          <b-switch v-bind="turnOnPlayerStats"
+            @input="onTurnOnPlayerStats"
+            type="is-success"
+            >
+              <span style="color:white;">Turn on</span>
+          </b-switch>
+
+          <!-- TOGGLE -->
+          <b-button rounded outlined @click="openPlayerStats = !openPlayerStats" type="is-danger" size="is-small" style="margin-left:25px;">
+            <b-icon icon="times"></b-icon>
+          </b-button>
+
+        </div>
+
+        <!-- ROW (FILE TREE, XML EDITOR) -->
+        <div style="display:flex;flex-direction:row;">
+
+          <pre style="white-space: break-spaces;">{{serverLog}}</pre>
+
+          <!-- FILE TREE -->
+          <!-- <div style="width:300px;margin-right:15px;">
+            Some shit here..
+          </div> -->
+
+          <!-- XML EDITOR -->
+          <!-- <div style="flex-grow:2">
+            <div id="archaeon-player-stats" style="height:800px;">
+              
+            </div>
+          </div> -->
+
+        </div>
+
+      </div>
+    </b-sidebar>
     
   </div>
 </template>
@@ -316,6 +370,7 @@ import RegisterModal from '@/components/RegisterModal'
 import LogoutButton from '@/components/LogoutButton'
 import LoginButton from '@/components/LoginButton'
 import AccountModal from '@/components/AccountModal'
+import { Uint8ArrayToStringsTransformer } from '@/utils'
 
 const getIZurvive = () => new Promise((resolve, reject) => {
     const i = setInterval(() => {
@@ -336,6 +391,9 @@ export default {
   mixins: [vueWindowSizeMixin],
   data () {
     return {
+      serverLog: ``,
+      turnOnPlayerStats: false,
+      openPlayerStats: false,
       selectedGameserverSetting: {
         id: null
       },
@@ -419,6 +477,44 @@ export default {
         }
       }
       return fetch(`https://api.nitrado.net${path}`, options)
+    },
+    async onTurnOnPlayerStats (value) {
+      if (value === true) {
+        try {
+          const method = 'GET'
+          const sid = this.selectedService.id
+          const gameserver = this.selectedServer.data.gameserver
+          const logFile = gameserver.game_specific.log_files.length > 0 ? gameserver.game_specific.log_files[0].replace('dayzxb/','') : ``
+          const filePath = gameserver.game_specific.path
+          if (logFile.length > 0) {
+            const file = `${filePath}${logFile}`
+            const path = `/services/${sid}/gameservers/file_server/download?file=${file}`
+            const response = await this.nitradoApiRequest(method, path)
+              .then(response => response.json())
+            console.log('log', response)
+            const url = response.data.token.url
+            console.log('url', url)
+            const method1 = 'GET'
+            const path1 = url
+            const response1 = await fetch(path1, { method: method1 })
+              .then(response => response.body)
+            const readableStream = response1
+            console.log('response1', response1)
+            const ts = new TransformStream(new Uint8ArrayToStringsTransformer())
+            const reader = readableStream.pipeThrough(ts).getReader()
+            let i = 0, accumulator = ``
+            while (true) {
+                const { done, value } = await reader.read()
+                // if (value) this.serverLog = `${this.serverLog}${value}`
+                if (value) accumulator = `${accumulator}${value}`
+                if (done) break
+            }
+            console.log(accumulator)
+          }
+        } catch (e) {
+          console.log(e)
+        }
+      }
     },
     async getGameserverSettings (sid) {
       const method = `GET`

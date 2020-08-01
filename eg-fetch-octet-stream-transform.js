@@ -1,19 +1,3 @@
-exports.randomString = function(len) {
-  var buf = []
-    , chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
-    , charlen = chars.length;
-
-  for (var i = 0; i < len; ++i) {
-    buf.push(chars[getRandomInt(0, charlen - 1)]);
-  }
-
-  return buf.join('');
-};
-
-function getRandomInt(min, max) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
 class Uint8ArrayToStringsTransformer {
   constructor() {
     this.decoder = new TextDecoder()
@@ -57,4 +41,14 @@ class Uint8ArrayToStringsTransformer {
   }
 }
 
-exports.Uint8ArrayToStringsTransformer = Uint8ArrayToStringsTransformer
+fetch('http://localhost:8001/api/v2/me', { credentials: 'include' })
+  .then(response => response.body)
+  .then(async readableStream => {
+      const ts = new TransformStream(new Uint8ArrayToStringsTransformer())
+      const reader = readableStream.pipeThrough(ts).getReader()
+      while (true) {
+          const { done, value } = await reader.read()
+          console.log(value)
+          if (done) break
+      }
+  })

@@ -31,7 +31,7 @@ const LogoutButton = {
       }
   },
   template: `
-    <b-button class="button is-warning" @click="onLogout" :disabled="busy" :loading="busy">
+    <b-button class="button is-danger" @click="onLogout" :disabled="busy" :loading="busy">
       Log out
     </b-button>
   `
