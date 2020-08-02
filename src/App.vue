@@ -337,14 +337,29 @@
             >
               <span style="color:white;">Killfeed</span>
           </b-switch>
-
           <b-switch v-model="turnOnPlayerStats"
             @input="onTurnOnPlayerStats"
             type="is-success"
-            :disabled="!accountForm.nitradoApiKey"
+            :disabled="!accountForm.nitradoApiKey || !selectedServer"
             >
               <span v-if="!playerStats.busy" style="color:white;">Stats (idle) {{playerStats.timer}} seconds until refresh</span>
               <span v-if="playerStats.busy" style="color:white;">Stats (busy)</span>
+          </b-switch>
+
+          <b-switch v-model="registerServer"
+            @input="onRegisterServer"
+            type="is-success"
+            :disabled="!accountForm.nitradoApiKey || !selectedServer || registerServer"
+            >
+              <span style="color:white;">Register Server</span>
+          </b-switch>
+
+          <b-switch v-model="publishServerFeed"
+            @input="onPublishServerFeed"
+            type="is-success"
+            :disabled="!accountForm.nitradoApiKey || !selectedServer || !registerServer"
+            >
+              <span style="color:white;">Publish Server Feed</span>
           </b-switch>
 
           <!-- TOGGLE -->
@@ -479,6 +494,13 @@ export default {
   mixins: [vueWindowSizeMixin],
   data () {
     return {
+      selectedServerAccess: {
+        busy: false,
+        error: false,
+        publish: false
+      },
+      registerServer: false,
+      publishServerFeed: false,
       serverLog: ``,
       playerStats: {
         timer: 120,
@@ -574,6 +596,56 @@ export default {
     }
   },
   methods: {
+    async onRegisterServer (value) {
+      if (value === true) {
+        try {
+          const body = {
+            name: this.selectedService.details.name,
+            nitradoServiceId: this.selectedService.id
+          }
+          const response = await this.$http.post(`http://localhost:8001/api/v2/servers`, body, {
+              withCredentials: true,
+              emulateJSON: true
+          })
+          this.success = true
+          this.busy = false
+        } catch (e) {
+          this.selectedServerAccess.error = e
+          console.log(e)
+        }
+      } else {
+
+      }
+    },
+    async onPublishServerFeed (value) {
+      if (value === true) {
+        try {
+          const body = {}
+          const response = await this.$http.put(`http://localhost:8001/api/v2/servers/${sid}/live`, body, {
+              withCredentials: true,
+              emulateJSON: true
+          })
+          this.success = true
+          this.busy = false
+        } catch (e) {
+          this.selectedServerAccess.error = e
+          console.log(e)
+        }
+      } else {
+        try {
+          const body = {}
+          const response = await this.$http.delete(`http://localhost:8001/api/v2/servers/${sid}/live`, body, {
+              withCredentials: true,
+              emulateJSON: true
+          })
+          this.success = true
+          this.busy = false
+        } catch (e) {
+          this.selectedServerAccess.error = e
+          console.log(e)
+        }
+      }
+    },
     parseServerLogFromString (serverLogString) {
       this.playerStats.markers.forEach(m => {
         iZurvive._map.removeLayer(m)
