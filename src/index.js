@@ -239,16 +239,20 @@ app.get('/api/v2/unauthenticate', (req, res) => {
 })
 
 app.get('/api/v2/users/:username', db.connected(), authorized(), (req, res) => {
-  const { params } = req
+  const { params, user } = req
   const { username } = params
-  simpleQuery(req, res, "select uname, uborn, convert_from(decrypt(nakey::bytea, 'secret-key', 'bf'), 'utf-8') as nakey from users where uname = $1", [username])
+  console.log('user', user, username)
+  if (user.uname === username) {
+    simpleQuery(req, res, "select uname, uborn, convert_from(decrypt(nakey::bytea, 'secret-key', 'bf'), 'utf-8') as nakey, convert_from(decrypt(dakey::bytea, 'secret-key', 'bf'), 'utf-8') as dakey from users where uname = $1", [username])
+  } else {
+    simpleQuery(req, res, "select uname, uborn from users where uid = $1", [user.uid])
+  }
 })
 
 app.put('/api/v2/users/:username', db.connected(), authorized(), upload.none(), (req, res) => {
-  const { params, body } = req
-  const { username } = params
-  const { nitradoApiKey } = body
-  simpleQuery(req, res, `update users set nakey = encrypt($1, 'secret-key', 'bf') where uname = $2`, [nitradoApiKey, username])
+  const { params, body, user } = req
+  const { nitradoApiKey, discordApiKey } = body
+  simpleQuery(req, res, `update users set nakey = encrypt($1, 'secret-key', 'bf'), dakey = encrypt($3, 'secret-key', 'bf') where uname = $2`, [nitradoApiKey, user.uname, discordApiKey])
 })
 
 app.get('/api/v2/me', db.connected(), authorized(), (req, res) => {
@@ -312,7 +316,11 @@ app.post('/api/v2/register', db.connected(), upload.none(), async (req, res) => 
     })
     const result = await new Promise(async (resolve, reject) => {
       try {
-        const query = `insert into users (uname, uemail, upassword) values ($1, $2, crypt($3, gen_salt('bf'))) returning uname, uborn`
+        const query = `
+          insert into users (uname, uemail, upassword, nakey, dakey)
+          values ($1, $2, crypt($3, gen_salt('bf')), encrypt(bytea '', 'secret-key', 'bf'), encrypt(bytea '', 'secret-key', 'bf'))
+          returning uname, uborn
+        `
         console.log('insert into user', username, email, password)
         const parameters = [username, email, password]
         const result = await db.query(query, parameters)

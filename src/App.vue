@@ -60,6 +60,7 @@
     </b-modal>
 
     <b-modal :active.sync="isAccountModalActive"
+      :key="Math.random()"
       has-modal-card
       trap-focus
       :destroy-on-hide="true"
@@ -67,12 +68,12 @@
       aria-role="dialog"
       aria-modal
       >
-      <account-modal v-bind="accountForm" :header="`Archaeon - Account`" @account="onAccount"></account-modal>
+      <account-modal :account="accountForm" :header="`Archaeon - Account`" @account="onAccount"></account-modal>
     </b-modal>
 
     <div id="archaeon-terminal-container" :class="{ 'grow-up': terminalExpanded, 'shrink-down': !terminalExpanded }" style="z-index:2;">
       <div id="archaeon-terminal-toggle">
-        <b-button v-if="!services.length" type="is-dark" @click="onGetServices" :loading="servicesBusy">
+        <b-button v-if="!services.length" type="is-dark" @click="onGetServices" :loading="servicesBusy" :disabled="!accountForm.nitradoApiKey">
           <b-icon icon="taxi"></b-icon>
         </b-button>
         <b-dropdown v-else v-model="selectedService" aria-role="list">
@@ -127,7 +128,7 @@
         </b-button>
       </div>
       <div id="archaeon-terminal-wrapper">
-        <div id="archaeon-terminal">
+        <div id="archaeon-terminal" :style="{ 'height': `${(windowHeight/2) - 65}px`, 'border': '1px solid #999', 'borderRadius': '3px' }">
           <div v-for="(line, i) in terminalOutput" :key="i">
             {{line}}
           </div>
@@ -164,7 +165,9 @@
           </b-field>
 
           <!-- DOWNLOAD -->
-          <b-button outlined type="is-link" size="is-small" style="margin-right:5px;" icon-left="random">
+          <b-button outlined type="is-link" size="is-small" style="margin-right:5px;" icon-left="random"
+            :disabled="!accountForm.nitradoApiKey"
+            >
             Transfer
           </b-button>
 
@@ -174,7 +177,7 @@
           </b-button>
 
           <!-- SETTINGS SELECTION -->
-          <b-dropdown v-model="selectedGameserverSetting" aria-role="list">
+          <b-dropdown v-model="selectedGameserverSetting" aria-role="list" :disabled="!accountForm.nitradoApikey">
               <button class="button is-info is-small" type="button" style="margin-right:5px;" slot="trigger" outlined>
                   <template v-if="selectedGameserverSetting.id">
                       <b-icon icon="tasks"></b-icon>
@@ -200,13 +203,16 @@
           </b-dropdown>
 
           <!-- DEPLOY -->
-          <b-button type="is-warning" size="is-small" style="margin-right:5px;" icon-left="sign-out-alt">
+          <b-button type="is-warning" size="is-small" style="margin-right:5px;" icon-left="sign-out-alt"
+            :disabled="!accountForm.nitradoApiKey || !selectedGameserverSetting.id"
+            >
            Hard Deploy
           </b-button>
 
           <!-- DEPLOY -->
           <b-button outlined type="is-warning" size="is-small" style="margin-right:5px;" icon-left="sign-in-alt"
-            @click="uploadFilesToGameserver(selectedService.id, ftpuname, files)">
+            @click="uploadFilesToGameserver(selectedService.id, ftpuname, files)"
+            :disabled="!accountForm.nitradoApiKey || !selectedGameserverSetting.id">
             Soft Deploy
           </b-button>
 
@@ -323,11 +329,22 @@
         <!-- ROW (TOP TOOL BAR) -->
         <div class="menu">
 
-          <b-switch v-bind="turnOnPlayerStats"
+
+          <b-switch v-model="discordBot.on"
+            @input="onTurnOnDiscordBotKillfeed"
+            type="is-success"
+            :disabled="!turnOnPlayerStats && !playerStats.busy"
+            >
+              <span style="color:white;">Killfeed</span>
+          </b-switch>
+
+          <b-switch v-model="turnOnPlayerStats"
             @input="onTurnOnPlayerStats"
             type="is-success"
+            :disabled="!accountForm.nitradoApiKey"
             >
-              <span style="color:white;">Turn on</span>
+              <span v-if="!playerStats.busy" style="color:white;">Stats (idle) {{playerStats.timer}} seconds until refresh</span>
+              <span v-if="playerStats.busy" style="color:white;">Stats (busy)</span>
           </b-switch>
 
           <!-- TOGGLE -->
@@ -337,22 +354,92 @@
 
         </div>
 
-        <!-- ROW (FILE TREE, XML EDITOR) -->
-        <div style="display:flex;flex-direction:row;">
+        <!-- STAGE -->
+        <div style="display:flex;flex-direction:column;">
 
-          <pre style="white-space: break-spaces;">{{serverLog}}</pre>
+          <!-- STATS -->
+          <div style="display:flex;flex-drection:row;margin-bottom:10px;justify-content:space-evenly;">
 
-          <!-- FILE TREE -->
-          <!-- <div style="width:300px;margin-right:15px;">
-            Some shit here..
-          </div> -->
-
-          <!-- XML EDITOR -->
-          <!-- <div style="flex-grow:2">
-            <div id="archaeon-player-stats" style="height:800px;">
-              
+            <div style="overflow-y:scroll;padding:5px;border:1px solid #999;border-radius: 3px;width:250px;"
+              :style="{
+                'height': `${(windowHeight/2)-60}px`
+              }"
+              >
+              <div style="font-weight:bold;color:orange;">kills</div>
+              <div v-for="(kill, key) in playerStats.kills" :key="key" :style="{ 'color': kill.status === 'online' ? 'lime' : '#eee' }">
+                <div style="display:flex;justify-content: space-between;">
+                  <div>{{ kill.player }}</div>
+                  <div>{{ kill.kills }}</div>
+                </div>
+              </div>
             </div>
-          </div> -->
+
+            <div style="overflow-y:scroll;padding:5px;border:1px solid #999;border-radius: 3px;width:250px;"
+              :style="{
+                'height': `${(windowHeight/2)-60}px`
+              }"
+              >
+              <div style="font-weight:bold;color:orange;">deaths</div>
+              <div v-for="(death, key) in playerStats.deaths" :key="key" :style="{ 'color': death.status === 'online' ? 'lime' : '#eee' }">
+                <div style="display:flex;justify-content: space-between;">
+                  <div>{{ death.player }}</div>
+                  <div>{{ death.deaths }}</div>
+                </div>
+              </div>
+            </div>
+
+            <div style="overflow-y:scroll;padding:5px;border:1px solid #999;border-radius: 3px;width:250px;"
+              :style="{
+                'height': `${(windowHeight/2)-60}px`
+              }"
+              >
+              <div style="font-weight:bold;color:orange;">k/d</div>
+              <div v-for="(kd, key) in playerStats.kds" :key="key" :style="{ 'color': kd.status === 'online' ? 'lime' : '#eee' }">
+                <div style="display:flex;justify-content: space-between;">
+                  <div>{{ kd.player }}</div>
+                  <div>{{ kd.kds }}</div>
+                </div>
+              </div>
+            </div>
+
+            <div style="overflow-y:scroll;padding:5px;border:1px solid #999;border-radius: 3px;width:250px;"
+              :style="{
+                'height': `${(windowHeight/2)-60}px`
+              }"
+              >
+              <div style="font-weight:bold;color:orange;">damage</div>
+              <div v-for="(damage, key) in playerStats.damage" :key="key" :style="{ 'color': damage.status === 'online' ? 'lime' : '#eee' }">
+                <div style="display:flex;justify-content: space-between;">
+                  <div>{{ damage.player }}</div>
+                  <div>{{ damage.damage }}</div>
+                </div>
+              </div>
+            </div>
+
+            <div style="overflow-y:scroll;padding:5px;border:1px solid #999;border-radius: 3px;width:250px;"
+              :style="{
+                'height': `${(windowHeight/2)-60}px`
+              }"
+              >
+              <div style="font-weight:bold;color:orange;">meters</div>
+              <div v-for="(meter, key) in playerStats.meters" :key="key" :style="{ 'color': meter.status === 'online' ? 'lime' : '#eee' }">
+                <div style="display:flex;justify-content: space-between;">
+                  <div>{{ meter.player }}</div>
+                  <div>{{ meter.meters }}</div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- SERVER LOG -->
+          <pre style="white-space: break-spaces;overflow-y:scroll;width:100%;color:white;background-color:#222;border:1px solid #999;"
+            :style="{
+              'height': `${(windowHeight/2)-50}px`
+            }"
+            >
+            {{serverLog}}
+          </pre>
 
         </div>
 
@@ -371,6 +458,7 @@ import LogoutButton from '@/components/LogoutButton'
 import LoginButton from '@/components/LoginButton'
 import AccountModal from '@/components/AccountModal'
 import { Uint8ArrayToStringsTransformer } from '@/utils'
+import { Client, MessageEmbed } from 'discord.js'
 
 const getIZurvive = () => new Promise((resolve, reject) => {
     const i = setInterval(() => {
@@ -392,7 +480,23 @@ export default {
   data () {
     return {
       serverLog: ``,
+      playerStats: {
+        timer: 120,
+        timeoutTimer: null,
+        timeout: null,
+        busy: false,
+        markers: [],
+        meters: [],
+        damage: [],
+        kills: [],
+        deaths: [],
+        kds: []
+      },
       turnOnPlayerStats: false,
+      discordBot: {
+        client: null,
+        on: false
+      },
       openPlayerStats: false,
       selectedGameserverSetting: {
         id: null
@@ -420,7 +524,8 @@ export default {
       isAccountModalActive: false,
       accountForm: {
         username: null,
-        nitradoApiKey: null
+        nitradoApiKey: null,
+        discordApiKey: null
       },
       terminalExpanded: false,
       editor: null,
@@ -469,6 +574,280 @@ export default {
     }
   },
   methods: {
+    parseServerLogFromString (serverLogString) {
+      this.playerStats.markers.forEach(m => {
+        iZurvive._map.removeLayer(m)
+        // console.log(m)
+      })
+      this.playerStats.markers = []
+      const playerPositionsHash = {}
+      const split = serverLogString.split('\n')
+      const transform = split
+        .filter(line => line.length > 0)
+        .map(line => {
+          let match = null
+          let lineTypes = [
+            'is connected',
+            'has been disconnected',
+            'hit by Player',
+            'hit by Infected',
+            'hit by FallDamage',
+            'killed by Player',
+            '##### PlayerList',
+            '\>\\)$'
+          ]
+
+          match = line.match(/[0-9]*:[0-9]*:[0-9]*/g)
+          const time = match ? match[0] : 'Unknown'
+
+          const type = lineTypes.filter(lineType => {
+            const regex = new RegExp(`${lineType}`)
+            return line.match(regex)
+          }).reduce((a,b) => b, ``)
+          // console.log(type)
+
+          match = line.match(/\|\sPlayer\s\"[a0-z9\s\/]*\"/g)
+          const player = match ? match[0].split('"')[1] : 'ParseWarning'
+          match = line.match(/by\sPlayer\s\"[a0-z9\s\/]*\"/g)
+          const byPlayer = type === 'hit by Infected' ? 'Infected' : (match ? match[0].split('"')[1] : 'ParseWarning')
+          match = null
+
+          match = line.match(/pos=\<[0-9]*.[0-9]*, [0-9]*.[0-9]*/g)
+          const coords = match ? match.map(c => {
+            return {
+              x: parseFloat(c.substring(5,11)),
+              y: parseFloat(c.substring(13,19))
+            }
+          }).reduce((a,b) => b, ``) : { x: null, y: null }
+          match = null
+
+          match = line.match(/for\s[0-9]*\sdamage/g)
+          const forDamage = match ? parseFloat(match[0].split(' ')[1]) : 0
+          match = null
+
+          match = line.match(/from\s[0-9]*\.[0-9]*\smeters/g)
+          const fromMeters = match ? parseFloat(match[0].split(' ')[1]) : 0
+          match = null
+
+          return {
+            line,
+            fromMeters,
+            time,
+            player,
+            byPlayer,
+            type,
+            forDamage,
+            coords
+          }
+        })
+        .filter(line => line.time !== 'Unknown')
+        .filter(line => line.type.length > 0)
+        .filter(line => line.player !== 'Unknown/Dead Entity')
+        .filter(line => line.byPlayer !== 'Unknown/Dead Entity')
+      
+      // .filter(pc => pc.player.match(/sundaysatan/g))
+      transform
+        // .filter(pc => pc.player.match(/sundaysatan/g))
+        // .filter(pc => {
+          // console.log(pc, pc.coords, pc.coords.x && pc.coords.y)
+        //   return pc.coords.x && pc.coords.y
+        // })
+        .forEach(pc => {
+
+          // console.log(pc)
+          // console.log(pc.type === '##### PlayerList', pc.type)
+          if (pc.type === '##### PlayerList') {
+            // console.log('pl')
+            Object.keys(playerPositionsHash)
+              .forEach(key => iZurvive._map.removeLayer(playerPositionsHash[key]))
+          } else if (pc.coords.x && pc.coords.y) {
+            const { x, y } = pc.coords
+
+            let color = 'black', fillColor = 'black'
+
+            switch (pc.type) {
+              case 'is connected': fillColor = 'lime'; break;
+              case 'has been disconnected': fillColor = 'black'; break;
+              case 'hit by Player': fillColor = 'orange'; break;
+              case 'hit by Infected': fillColor = 'green'; break;
+              case 'hit by FallDamage': fillColor = 'yellow'; break;
+              case 'killed by Player': fillColor = 'red'; break;
+              case '\>\\)$': fillColor = 'aqua'; break;
+            }
+
+            const options = (fillColor === 'aqua') ? {
+              weight: 5,
+              color: 'blue',
+              fillColor: fillColor,
+              fillOpacity: 0.5,
+              radius: 16000
+            } : {
+              weight: 2,
+              color: 'red',
+              fillColor: fillColor,
+              fillOpacity: 0.75,
+              radius: 4000
+            }
+
+            // console.log(x, y, pc)
+
+            if (fillColor === 'aqua') {
+              const latlng = L.LocUtil.locToCoords({
+                loc1: x,
+                loc2: y
+              }, {
+                kx: 0.00039746552365541434,
+                ky: 0.00039747543741573465,
+                dx: 7961.677966525134,
+                dy: 7961.958744725942,
+                switchedCoords: false
+              })
+
+              playerPositionsHash[pc.player] = L
+                .circle([latlng.lat, latlng.lng], options)
+
+              this.playerStats.markers.push(playerPositionsHash[pc.player])
+
+              playerPositionsHash[pc.player].on('mouseover', (e) => {
+                const content = `${pc.player} @${pc.time}`
+                L.popup()
+                  .setLatLng(e.latlng) 
+                  .setContent(content)
+                  .openOn(iZurvive._map)
+              })
+              playerPositionsHash[pc.player].addTo(iZurvive._map)
+            } else {
+              const latlng = L.LocUtil.locToCoords({
+                loc1: x,
+                loc2: y
+              }, {
+                kx: 0.00039746552365541434,
+                ky: 0.00039747543741573465,
+                dx: 7961.677966525134,
+                dy: 7961.958744725942,
+                switchedCoords: false
+              })
+
+              const marker = L
+                .circle([latlng.lat, latlng.lng], options)
+
+              marker.on('mouseover', (e) => {
+                const content = `${pc.player} ${pc.type} ${pc.byPlayer} from ${pc.fromMeters} meters @${pc.time}`
+                L.popup()
+                  .setLatLng(e.latlng) 
+                  .setContent(content)
+                  .openOn(iZurvive._map)
+              })
+              marker.addTo(iZurvive._map)
+              this.playerStats.markers.push(marker)
+            }
+          }
+
+        })
+
+      const damageHash = {}
+      const metersHash = {}
+      const killsHash = {}
+      const deathsHash = {}
+      const statusHash = {}
+      const kdsHash = {}
+
+      transform
+        .forEach(line => {
+          if (line.type === 'is connected') {
+            statusHash[line.player] = 'online'
+          }
+          if (line.type === 'has been disconnected') {
+            statusHash[line.player] = 'offline'
+          }
+        })
+
+      transform
+        .forEach(line => {
+          if (!damageHash[line.byPlayer]) {
+            damageHash[line.byPlayer] = 0
+          }
+          damageHash[line.byPlayer] += line.forDamage
+        })
+
+      transform
+        .forEach(line => {
+          if (!metersHash[line.byPlayer]) {
+            metersHash[line.byPlayer] = line.fromMeters
+          }
+          metersHash[line.byPlayer] = line.fromMeters > metersHash[line.byPlayer] ? line.fromMeters : metersHash[line.byPlayer]
+        })
+
+      transform
+        .filter(line => line.byPlayer !== 'Unknown')
+        .filter(line => {
+          return line.type === 'killed by Player'
+        })
+        // A killed by Player B
+        .forEach(line => {
+          killsHash[`${line.byPlayer}`] = killsHash[`${line.byPlayer}`] !== undefined ? killsHash[`${line.byPlayer}`] + 1 : 1
+          deathsHash[`${line.player}`] = deathsHash[`${line.player}`] !== undefined ? deathsHash[`${line.player}`] + 1 : 1
+        })
+
+      transform
+        .filter(line => line.byPlayer !== 'Unknown')
+        .forEach(line => {
+          const { player, byPlayer } = line
+          const playerKills = killsHash[player] ? killsHash[player] : 0
+          const playerDeaths = deathsHash[player] ? deathsHash[player] : 0
+          if ((playerKills < 1) && (playerDeaths < 1)) {
+            kdsHash[`${player}`] = 0
+          } else {
+            kdsHash[`${player}`] = (playerKills/(playerDeaths + 1)).toFixed(2)
+          }
+        })
+
+      const metersKeys = Object.keys(metersHash)
+      const meters = metersKeys.map(key => ({
+        player: key,
+        meters: metersHash[key],
+        status: statusHash[key]
+      }))
+
+      const damageKeys = Object.keys(damageHash)
+      const damage = damageKeys.map(key => ({
+        player: key,
+        damage: damageHash[key],
+        status: statusHash[key]
+      }))
+
+      const killsKeys = Object.keys(killsHash)
+      const kills = killsKeys.map(key => ({
+        player: key,
+        kills: killsHash[key],
+        status: statusHash[key]
+      }))
+
+      const deathsKeys = Object.keys(deathsHash)
+      const deaths = deathsKeys.map(key => ({
+        player: key,
+        deaths: deathsHash[key],
+        status: statusHash[key]
+      }))
+
+      const kdsKeys = Object.keys(kdsHash)
+      const kds = kdsKeys.map(key => ({
+        player: key,
+        kds: kdsHash[key],
+        status: statusHash[key]
+      }))
+
+      meters.sort((a,b) => parseFloat(b.meters) - parseFloat(a.meters))
+      this.playerStats.meters = meters
+      damage.sort((a,b) => b.damage - a.damage)
+      this.playerStats.damage = damage
+      kills.sort((a,b) => b.kills - a.kills)
+      this.playerStats.kills = kills
+      deaths.sort((a,b) => b.deaths - a.deaths)
+      this.playerStats.deaths = deaths
+      kds.sort((a,b) => b.kds - a.kds)
+      this.playerStats.kds = kds
+    },
     nitradoApiRequest (method, path) {
       const options = {
         'method': method,
@@ -478,9 +857,34 @@ export default {
       }
       return fetch(`https://api.nitrado.net${path}`, options)
     },
+    onTurnOnDiscordBotKillfeed (value) {
+      if (value === true) {
+        this.discordBot.client = new Client()
+        const client = this.discordBot.client
+        const prefix = '!'
+
+        client.once('ready', () => {
+          client.guilds.cache.find(guild => console.log(guild))
+          const experimental = client.channels.cache.find(channel => channel.name === 'killbox')
+          // experimental.send('i have been summoned')
+        })
+
+        client.on('message', async message => {
+          console.log('bot recieved message', message)
+        })
+
+        client.login(this.accountForm.discordApiKey)
+        
+      } else {
+        if (this.discordBot.client) {
+          this.discordBot.client.destroy()
+        }
+      }
+    },
     async onTurnOnPlayerStats (value) {
       if (value === true) {
         try {
+          this.playerStats.busy = true
           const method = 'GET'
           const sid = this.selectedService.id
           const gameserver = this.selectedServer.data.gameserver
@@ -505,15 +909,59 @@ export default {
             let i = 0, accumulator = ``
             while (true) {
                 const { done, value } = await reader.read()
-                // if (value) this.serverLog = `${this.serverLog}${value}`
-                if (value) accumulator = `${accumulator}${value}`
+                if (value) {
+                  accumulator = `${accumulator}${value}\n`
+                }
                 if (done) break
             }
-            console.log(accumulator)
+            this.serverLog = accumulator
+            if (this.serverLogPrevLength < 1) {
+              this.serverLogPrevLength = this.serverLog.length
+            }
+            if (this.serverLog.length > this.serverLogPrevLength) {
+              const newLines = this.serverLog.substring(this.serverLogPrevLength, this.serverLog.length)
+              newLines.split('\n')
+                .forEach(value => {
+                  if (value.match(/killed by Player/g)) {
+                    console.log(value)
+                    const victim = value.match(/\|\sPlayer\s\"[a0-z9\s\/]*\"/g)
+                      .reduce((a,c) => c.split('"')[1], ``)
+                    const killer = value.match(/by\sPlayer\s\"[a0-z9\s\/]*\"/g)
+                      .reduce((a,c) => c.split('"')[1], ``)
+                    const weapon = value.match(/with\s[a0-z9\/\-]*/g)[0]
+                      .split(' ')[1]
+                    // cuz sometimes it's not there
+                    let meters = value.match(/from\s[0-9]*\.[0-9]*\smeters/g)
+                    meters = meters ? meters.reduce((a,c) => c.split(' ')[1], ``) : `0`
+                    console.log(victim, killer, weapon, meters)
+                    const client = this.discordBot.client
+                    client.guilds.cache.find(guild => console.log(guild))
+                    const experimental = client.channels.cache.find(channel => channel.name === 'killbox')
+                    let feed = `__${killer}__ killed _${victim}_ with ${weapon}`
+                    feed = meters === `0` ? feed : `${feed} from ${meters} meters`
+                    feed = `${feed}.`
+                    experimental.send(feed)
+                  }
+                })
+            }
+            this.serverLogPrevLength = this.serverLog.length
+            this.parseServerLogFromString(this.serverLog)
+            this.playerStats.timer = 120
+            this.playerStats.timeout = setTimeout(() => {
+              this.onTurnOnPlayerStats(true)
+            }, 120000)
+            clearInterval(this.playerStats.timeoutTimer)
+            this.playerStats.timeoutTimer = setInterval(() => {
+              this.playerStats.timer--
+            }, 1000)
+            this.playerStats.busy = false
           }
         } catch (e) {
           console.log(e)
         }
+      } else {
+        clearInterval(this.playerStats.timeoutTimer)
+        clearTimeout(this.playerStats.timeout)
       }
     },
     async getGameserverSettings (sid) {
@@ -750,7 +1198,8 @@ export default {
       this.servicesBusy = false
     },
     onAccount (account) {
-      this.accountForm.nitradoApiKey = account.nakey
+      console.log('on account from app', account)
+      this.accountForm = { ...account }
     },
     async onLoadFile (fileContent, paths) {
       let confirmation = false
@@ -870,7 +1319,8 @@ export default {
       this.user = user
       this.accountForm = {
         username: user.uname,
-        nitradoApiKey: user.nakey
+        nitradoApiKey: user.nakey,
+        discordApiKey: user.dakey
       }
     },
     getHeader () {
@@ -1002,7 +1452,6 @@ div.dialog.modal {
   background-color: rgba(25,25,25);
   color:white;
   font-family: monospace;
-  height:100%;
   overflow-y: scroll;
 }
 
