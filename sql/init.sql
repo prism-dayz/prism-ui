@@ -23,6 +23,48 @@ insert into users (
   encrypt(bytea 'Njk5MDMxMTM4ODAyNTk3OTE4.XpOdeg.eEpW3Hf7g2Oyijpwx_x8X0Thc7c', 'secret-key', 'bf')
 );
 
+create table servers (
+  sid serial primary key not null,
+  sname varchar(128) unique not null,
+  snitradoServiceId varchar(64) unique not null,
+  sborn date not null default now(),
+  sactive integer not null default 0,
+  uid integer not null,
+  foreign key (uid) references users(uid)
+);
+
+create table players (
+  pid serial primary key not null,
+  pxboxid varchar(128) not null,
+  pname varchar(64) not null,
+  sid integer not null,
+  foreign key (sid) references servers(sid)
+);
+
+-- across all reinstalls and
+create table alltimestats (
+  akills integer not null default 0,
+  adeaths integer not null default 0,
+  adamage integer not null default 0,
+  ameters numeric not null default 0,
+  asurvivetime integer not null default 0,
+  akstreak integer not null default 0,
+  pid integer not null,
+  foreign key (pid) references players(pid)
+);
+
+-- rows will remain pretty much, but will effectively reset if a game server is determined to have been reinstalled
+create table currentstats (
+  ckills integer not null default 0,
+  cdeaths integer not null default 0,
+  cdamage integer not null default 0,
+  cmeters numeric not null default 0,
+  csurvivetime integer not null default 0,
+  ckstreak integer not null default 0,
+  pid integer not null,
+  foreign key (pid) references players(pid)
+);
+
 create table traffic (
   tid serial primary key not null,
   thostname varchar not null,

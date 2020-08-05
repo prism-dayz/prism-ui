@@ -255,6 +255,19 @@ app.put('/api/v2/users/:username', db.connected(), authorized(), upload.none(), 
   simpleQuery(req, res, `update users set nakey = encrypt($1, 'secret-key', 'bf'), dakey = encrypt($3, 'secret-key', 'bf') where uname = $2`, [nitradoApiKey, user.uname, discordApiKey])
 })
 
+app.put('/api/v2/servers/:sid/live', db.connected(), authorized(), (req, res) => {
+  // http://localhost:8001/api/v2/servers/${sid}/live
+  const { sid } = params
+  try {
+    const
+  } catch (e) {
+    console.log(error)
+    res.status(500)
+    res.send(error)
+    res.end()
+  }
+})
+
 app.get('/api/v2/me', db.connected(), authorized(), (req, res) => {
   const { user } = req
   const { uname } = user
