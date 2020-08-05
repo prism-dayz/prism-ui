@@ -22,6 +22,7 @@
   "dependencies": {
     "body-parser": "^1.19.0",
     "buefy": "^0.8.18",
+    "buffer": "^5.6.0",
     "connect-pg-simple": "^6.1.0",
     "cookie-parser": "^1.4.5",
     "core-js": "^3.6.4",
@@ -30,6 +31,7 @@
     "discord.js": "^12.2.0",
     "express": "^4.17.1",
     "express-session": "^1.17.1",
+    "html2canvas": "^1.0.0-rc.5",
     "morgan": "^1.10.0",
     "multer": "^1.4.2",
     "passport": "^0.4.1",

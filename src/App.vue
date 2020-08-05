@@ -433,7 +433,7 @@
           </div>
 
           <!-- SERVER LOG -->
-          <pre style="white-space: break-spaces;overflow-y:scroll;width:100%;color:white;background-color:#222;border:1px solid #999;"
+          <pre id="archaeon-server-logs" style="white-space: break-spaces;overflow-y:scroll;width:100%;color:white;background-color:#222;border:1px solid #999;"
             :style="{
               'height': `${(windowHeight/2)-50}px`
             }"
@@ -458,7 +458,9 @@ import LogoutButton from '@/components/LogoutButton'
 import LoginButton from '@/components/LoginButton'
 import AccountModal from '@/components/AccountModal'
 import { Uint8ArrayToStringsTransformer } from '@/utils'
-import { Client, MessageEmbed } from 'discord.js'
+import { Client, MessageEmbed, MessageAttachment, RichEmbed } from 'discord.js'
+import html2canvas from 'html2canvas'
+import { Buffer } from 'buffer'
 
 const getIZurvive = () => new Promise((resolve, reject) => {
     const i = setInterval(() => {
@@ -546,6 +548,22 @@ export default {
       fullheight: true,
       fullwidth: false,
       right: true
+    }
+  },
+  watch: {
+    serverLog (newValue, oldValue) {
+      const terminal = document.getElementById('archaeon-server-logs')
+      console.log(terminal.scrollTop, terminal.scrollHeight)
+      this.$nextTick(() => {
+        terminal.scrollTop = terminal.scrollHeight
+      })
+    },
+    terminalOutput (newValue, oldValue) {
+      const terminal = document.getElementById('archaeon-terminal')
+      console.log(terminal.scrollTop, terminal.scrollHeight)
+      this.$nextTick(() => {
+        terminal.scrollTop = terminal.scrollHeight
+      })
     }
   },
   components: {
@@ -838,15 +856,15 @@ export default {
       }))
 
       meters.sort((a,b) => parseFloat(b.meters) - parseFloat(a.meters))
-      this.playerStats.meters = meters
+      this.playerStats.meters = meters.map((stat, i) => ({ ...stat, rank: i + 1 }))
       damage.sort((a,b) => b.damage - a.damage)
-      this.playerStats.damage = damage
+      this.playerStats.damage = damage.map((stat, i) => ({ ...stat, rank: i + 1 }))
       kills.sort((a,b) => b.kills - a.kills)
-      this.playerStats.kills = kills
+      this.playerStats.kills = kills.map((stat, i) => ({ ...stat, rank: i + 1 }))
       deaths.sort((a,b) => b.deaths - a.deaths)
-      this.playerStats.deaths = deaths
+      this.playerStats.deaths = deaths.map((stat, i) => ({ ...stat, rank: i + 1 }))
       kds.sort((a,b) => b.kds - a.kds)
-      this.playerStats.kds = kds
+      this.playerStats.kds = kds.map((stat, i) => ({ ...stat, rank: i + 1 }))
     },
     nitradoApiRequest (method, path) {
       const options = {
@@ -870,7 +888,113 @@ export default {
         })
 
         client.on('message', async message => {
-          console.log('bot recieved message', message)
+          console.log(`bot recieved message`, message)
+          if (message.content.substring(0,5) === '!rank') {
+            if (message.content.substring(6,8) === 'kd') {
+              const targetPlayerName = message.content.substring(9,message.content.length)
+              const rank = this.playerStats.kds
+                .filter(({ player }) => player === targetPlayerName)
+                .reduce((a,c,i) => `Player _${c.player}_ ranked ${c.rank}/${this.playerStats.kds.length} with a ${c.kds} k/d ratio.`, ``)
+              if (rank.length > 1) {
+                message.channel.send(rank)
+              } else {
+                message.channel.send(`Player _${targetPlayerName}_ not ranked.`)
+              }
+            } else if (message.content.substring(6,11) === 'kills') {
+              const targetPlayerName = message.content.substring(12,message.content.length)
+              const rank = this.playerStats.kills
+                .filter(({ player }) => player === targetPlayerName)
+                .reduce((a,c,i) => `Player _${c.player}_ ranked ${c.rank}/${this.playerStats.kills.length} with ${c.kills} kills.`, ``)
+              if (rank.length > 1) {
+                message.channel.send(rank)
+              } else {
+                message.channel.send(`Player _${targetPlayerName}_ not ranked.`)
+              }
+            } else if (message.content.substring(6,12) === 'deaths') {
+              const targetPlayerName = message.content.substring(13,message.content.length)
+              const rank = this.playerStats.deaths
+                .filter(({ player }) => player === targetPlayerName)
+                .reduce((a,c,i) => `Player _${c.player}_ ranked ${c.rank}/${this.playerStats.deaths.length} with ${c.deaths} deaths.`, ``)
+              if (rank.length > 1) {
+                message.channel.send(rank)
+              } else {
+                message.channel.send(`Player _${targetPlayerName}_ not ranked.`)
+              }
+            } else if (message.content.substring(6,12) === 'damage') {
+              const targetPlayerName = message.content.substring(13,message.content.length)
+              const rank = this.playerStats.damage
+                .filter(({ player }) => player === targetPlayerName)
+                .reduce((a,c,i) => `Player _${c.player}_ ranked ${c.rank}/${this.playerStats.damage.length} causing ${c.damage} damage.`, ``)
+              if (rank.length > 1) {
+                message.channel.send(rank)
+              } else {
+                message.channel.send(`Player _${targetPlayerName}_ not ranked.`)
+              }
+            } else if (message.content.substring(6,12) === 'meters') {
+              const targetPlayerName = message.content.substring(13,message.content.length)
+              const rank = this.playerStats.meters
+                .filter(({ player }) => player === targetPlayerName)
+                .reduce((a,c,i) => `Player _${c.player}_ ranked ${c.rank}/${this.playerStats.kills.length} with longest shot ${c.meters} meters.`, ``)
+              if (rank.length > 1) {
+                message.channel.send(rank)
+              } else {
+                message.channel.send(`Player _${targetPlayerName}_ not ranked.`)
+              }
+            } else {
+              message.channel.send(`usage: !rank <kd,kills,deaths,damage,meters> <player-name> \n\te.g., !rank kd sundaysatan\n\tnote: player names are case sensitive`)
+            }
+          }
+          if (message.content.substring(0,12) === '!leaderboard') {
+            console.log('leaderboard')
+            if (message.content.substring(13,15) === 'kd') {
+              const stats = this.playerStats.kds
+                .map(({ player, kds, rank }) => `${(parseInt(rank) < 10 ? ` ${rank}` : rank)} | ${(kds < 10) ? ` ${kds}` : kds} | ${player}\n`)
+                .filter((stat, i) => i < 25)
+                .reduce((a,c) => `${a}${c}`, ``)
+              const statsWrapper = `\`\`\` # | k/d   | survivor\n${stats}\`\`\``
+              console.log(statsWrapper)
+              message.channel.send(statsWrapper)
+            } else if (message.content.substring(13,18) === 'kills') {
+              const stats = this.playerStats.kills
+                .map(({ player, kills, rank }) => `${(parseInt(rank) < 10 ? ` ${rank}` : rank)} |   ${(kills < 10) ? `  ${kills}` : ((kills < 100) ? ` ${kills}` : kills)} | ${player}\n`)
+                .filter((stat, i) => i < 25)
+                .reduce((a,c) => `${a}${c}`, ``)
+              const statsWrapper = `\`\`\` # | kills | survivor\n${stats}\`\`\``
+              console.log(statsWrapper)
+              message.channel.send(statsWrapper)
+            } else {
+              message.channel.send(`usage: !leaderboard <kd,kills> \n\te.g., !leaderboard kd`)
+            }
+          }
+          if (message.content.substring(0,5) === '!map') {
+            html2canvas(document.querySelector('#map'), { allowTaint: true, foreignObjectRendering: true, useCORS: true })
+              .then(canvas => {
+                canvas.toBlob(async blob => {
+                  const uintArrayBuffer = await blob.arrayBuffer()
+                  const attachment = new MessageAttachment(uintArrayBuffer, 'heatmap.png')
+                  message.channel.send(attachment)
+                })
+
+                // const imageDataUrl = canvas.toDataURL('image/png')
+                // console.log('imagedata', imageDataUrl)
+                // const encoder = new TextEncoder()
+                // const uintArrayBuffer = encoder.encode(imageDataUrl)
+                // const attachment = new MessageAttachment(uintArrayBuffer.buffer, 'heatmap.png')
+                // message.channel.send(attachment)
+
+                // const imageDataUrl = canvas.toDataURL('image/png')
+                // console.log('imagedata', imageDataUrl)
+                // const encoder = new TextEncoder()
+                // const uintArrayBuffer = encoder.encode(imageDataUrl)
+                // const attachment = new MessageEmbed(uintArrayBuffer.buffer, 'heatmap.png')
+                // message.channel.send({ embed: attachment })
+              })
+          }
+          // const guildMembers = message.mentions.members.array()
+          // guildMembers.filter(({ user }) => user.username === 'rooster')
+          //   .forEach(() => {
+          //     message.reply('oy')
+          //   })
         })
 
         client.login(this.accountForm.discordApiKey)
