@@ -81,13 +81,13 @@ const simpleQuery = async (req, res, query = '', params = [], cb = () => {}, com
     if (compress === true) {
       res.send([result.rows.reduce((a,c) => {
         const { servers } = { servers: [], ...a }
-        const { sid, sname, sactive, sborn, snitradoserviceid, ...rest } = c
-        console.log(sid, sname, sactive, sborn, snitradoserviceid)
+        const { sid, sname, sactive, sborn, ...rest } = c
+        console.log(sid, sname, sactive, sborn)
         return {
           ...rest,
           servers: [
             ...servers,
-            { sid, sname, sactive, sborn, snitradoserviceid }
+            { sid, sname, sactive, sborn }
           ]
         }
       }, [])])
@@ -311,7 +311,7 @@ app.post('/api/v2/servers', db.connected(), authorized(), upload.none(), async (
     const { body, user } = req
     const { name, nitradoServiceId } = body
     await new Promise(async (resolve, reject) => {
-      const query = `select sid, sname, sborn, sactive, uid from servers where snitradoserviceid = $1`
+      const query = `select sid, sname, sborn, sactive, uid from servers where sid = $1`
       const parameters = [nitradoServiceId]
       const result = await db.query(query, parameters)
       if (result.rows.length === 0) {
@@ -324,9 +324,9 @@ app.post('/api/v2/servers', db.connected(), authorized(), upload.none(), async (
     const result = await new Promise(async (resolve, reject) => {
       try {
         const query = `
-          insert into servers (sname, snitradoserviceid, uid)
+          insert into servers (sname, sid, uid)
           values ($1, $2, $3)
-          returning sname, sid, sborn, sactive, uid, snitradoserviceid
+          returning sname, sid, sborn, sactive, uid
         `
         console.log('insert into servers', name, nitradoServiceId, user.uid)
         const parameters = [name, nitradoServiceId, user.uid]
@@ -388,7 +388,7 @@ const getServerLog = (sid, user, file, gameserver) => {
 const updateServerLogStore = async (sid, user, ftpPath, size) => {
   const { uid } = user
   try {
-    const query = `update servers set sloglastsize = $1, sloglastftppath = $2 where snitradoserviceid = $3 and uid = $4`
+    const query = `update servers set sloglastsize = $1, sloglastftppath = $2 where sid = $3 and uid = $4`
     const params = [parseInt(size), ftpPath, parseInt(sid), uid]
     const result = await db.query(query, params)
   } catch (error) {
@@ -400,33 +400,95 @@ const updateServerLogStore = async (sid, user, ftpPath, size) => {
 const parseServerLog = async (sid, user, serverLog, ftpPath, recentSize) => {
   console.log('got new server log content')
   // update the database with the stats
-  const lines = serverLog.body.split('\n').filter(line => line.length > 0)
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    console.log(line)
-    let match = null
-    let lineTypes = [
-      'is connected',
-      'has been disconnected',
-      'hit by Player',
-      'hit by Infected',
-      'hit by FallDamage',
-      'killed by Player',
-      '##### PlayerList',
-      '\>\\)$'
-    ]
+  const lines = serverLog.body.split('\n')
+    .filter(line => line.length > 0)
+    .map(line => {
+      let match = null
+      let lineTypes = [
+        'is connected',
+        'has been disconnected',
+        'hit by Player',
+        'hit by Infected',
+        'hit by FallDamage',
+        'killed by Player',
+        '##### PlayerList',
+        '\>\\)$'
+      ]
 
-    match = line.match(/[0-9]*:[0-9]*:[0-9]*/g)
-    const time = match ? match[0] : 'Unknown'
+      match = line.match(/[0-9]*:[0-9]*:[0-9]*/g)
+      const time = match ? match[0] : 'Unknown'
 
-    const type = lineTypes.filter(lineType => {
-      const regex = new RegExp(`${lineType}`)
-      return line.match(regex)
-    }).reduce((a,b) => b, ``)
+      const type = lineTypes.filter(lineType => {
+        const regex = new RegExp(`${lineType}`)
+        return line.match(regex)
+      }).reduce((a,b) => b, ``)
+      // console.log(type)
 
+      match = line.match(/\|\sPlayer\s\"[a0-z9\s\/]*\"/g)
+      const player = match ? match[0].split('"')[1] : 'ParseWarning'
+      match = line.match(/by\sPlayer\s\"[a0-z9\s\/]*\"/g)
+      const byPlayer = type === 'hit by Infected' ? 'Infected' : (match ? match[0].split('"')[1] : 'ParseWarning')
+      match = null
 
+      match = line.match(/pos=\<[0-9]*.[0-9]*, [0-9]*.[0-9]*/g)
+      const coords = match ? match.map(c => {
+        return {
+          x: parseFloat(c.substring(5,11)),
+          y: parseFloat(c.substring(13,19))
+        }
+      }).reduce((a,b) => b, ``) : { x: null, y: null }
+      match = null
 
-  }
+      match = line.match(/for\s[0-9]*\sdamage/g)
+      const forDamage = match ? parseFloat(match[0].split(' ')[1]) : 0
+      match = null
+
+      match = line.match(/from\s[0-9]*\.[0-9]*\smeters/g)
+      const fromMeters = match ? parseFloat(match[0].split(' ')[1]) : 0
+      match = null
+
+      return {
+        line,
+        fromMeters,
+        time,
+        player,
+        byPlayer,
+        type,
+        forDamage,
+        coords
+      }
+    })
+    .filter(line => line.time !== 'Unknown')
+    .filter(line => line.type.length > 0)
+    .filter(line => line.player !== 'Unknown/Dead Entity')
+    .filter(line => line.byPlayer !== 'Unknown/Dead Entity')
+  
+  lines.filter(line => line.type === `killed by Player`)
+    .forEach(async line => {
+      try {
+        const pid = line.match(/\|\sPlayer\s\"[a0-z9\s\/]*\"\s\(id=[A-Z0-9]*/g)[0].split('id=')[1]
+        const query = `update alltimestats set akills = akills + 1, akstreak = akstreak + 1 where pid = $1 returning *`
+        const parameters = [pid]
+        const result = await db.query(query, parameters)
+        if (!result.rows) {
+          // new player
+          // create table players (
+          //   pid varchar(128) primary key not null,
+          //   pname varchar(64) not null,
+          //   sid integer not null,
+          //   foreign key (sid) references servers(sid)
+          // );
+          // const query = `insert into players (pid, pname, sid) values ()`
+          // const parameters = [pid]
+          // const result = await db.query(query, parameters)
+        } else {
+          // good to go?
+        }
+      } catch (e) {
+        console.log('could not update or create player', e, line)
+      }
+    })
+
   // do this again in 5 minutes (or try and get last timestamp and do it 5 minutes from then)
   const t = setTimeout(() => {
     initLiveKillFeed(sid, user)
@@ -474,7 +536,7 @@ const initLiveKillFeed = async (sid, user) => {
   })
   // go get last server log's size from db
   const lastServerLogFromStore = await new Promise(async (resolve, reject) => {
-    const query = `select * from servers where snitradoserviceid = $1`
+    const query = `select * from servers where sid = $1`
     const parameters = [sid]
     const result = await db.query(query, parameters)
     if (result.rows.length > 0) {
@@ -560,7 +622,7 @@ app.put('/api/v2/servers/:sid/live', db.connected(), authorized(), (req, res) =>
   const { params, user } = req
   const { sid } = params
   const { uid } = user
-  simpleQuery(req, res, `update servers set sactive = 1 where snitradoserviceid = $1 and uid = $2`, [parseInt(sid), uid], () => {
+  simpleQuery(req, res, `update servers set sactive = 1 where sid = $1 and uid = $2`, [parseInt(sid), uid], () => {
     initLiveKillFeed(sid, user)
   })
 })
@@ -569,7 +631,7 @@ app.delete('/api/v2/servers/:sid/live', db.connected(), authorized(), (req, res)
   const { params, user } = req
   const { sid } = params
   const { uid } = user
-  simpleQuery(req, res, `update servers set sactive = 0 where snitradoserviceid = $1 and uid = $2`, [parseInt(sid), uid], () => {
+  simpleQuery(req, res, `update servers set sactive = 0 where sid = $1 and uid = $2`, [parseInt(sid), uid], () => {
     destroyLiveKillFeed(sid)
   })
 })

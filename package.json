@@ -7,7 +7,7 @@
   "author": "brngdsn",
   "license": "MIT",
   "scripts": {
-    "initdb:osx": "cat ./sql/init.sql | sudo -u postgres psql -d archaeon",
+    "initdb:osx": "cat ./sql/init.sql | sudo -u methanogen psql -d archaeon",
     "createdb:osx": "createdb archaeon",
     "ec2": "ssh -i ./archaeon.pem ec2-user@$EC2_HOST",
     "initdb": "cat ./sql/init.sql | sudo -u postgres psql -d archaeon",

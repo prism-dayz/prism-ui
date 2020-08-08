@@ -638,14 +638,14 @@ export default {
   },
   methods: {
     isServerRegistered (sid) {
-      const isServerRegistered = this.user.servers ? this.user.servers.filter(server => `${server.snitradoserviceid}` === `${sid}`).length > 0 : false
+      const isServerRegistered = this.user.servers ? this.user.servers.filter(server => `${server.sid}` === `${sid}`).length > 0 : false
       if (isServerRegistered) {
         this.serverRegistered = true
       }
       return isServerRegistered
     },
     isServerPublished (sid) {
-      const isServerPublished = this.user.servers ? this.user.servers.filter(server => `${server.snitradoserviceid}` === `${sid}`).reduce((a,c) => c.sactive > 0 ? true : false, false) : false
+      const isServerPublished = this.user.servers ? this.user.servers.filter(server => `${server.sid}` === `${sid}`).reduce((a,c) => c.sactive > 0 ? true : false, false) : false
       if (isServerPublished) {
         this.publishServerFeed = true
       }
