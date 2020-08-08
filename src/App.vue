@@ -71,6 +71,7 @@
       <account-modal :account="accountForm" :header="`Archaeon - Account`" @account="onAccount"></account-modal>
     </b-modal>
 
+    <!-- TERMINAL -->
     <div id="archaeon-terminal-container" :class="{ 'grow-up': terminalExpanded, 'shrink-down': !terminalExpanded }" style="z-index:2;">
       <div id="archaeon-terminal-toggle">
         <b-button v-if="!services.length" type="is-dark" @click="onGetServices" :loading="servicesBusy" :disabled="!accountForm.nitradoApiKey">
@@ -91,6 +92,10 @@
                     <div class="media-content">
                         <h3>{{service.details.name}}</h3>
                         <small>{{service.details.game}} #{{service.id}}</small>
+                        <b-tag v-if="isServerRegistered(service.id)" type="is-dark">Registered</b-tag>
+                        <b-tag v-else type="is-light">Registered</b-tag>
+                        <b-tag v-if="isServerPublished(service.id)" type="is-success">Live</b-tag>
+                        <b-tag v-else type="is-light">Live</b-tag>
                     </div>
                 </div>
             </b-dropdown-item>
@@ -136,6 +141,7 @@
       </div>
     </div>
 
+    <!-- EDITOR -->
     <b-sidebar
       class="archaeon-panel"
       type="is-light"
@@ -314,6 +320,7 @@
       </div>
     </b-sidebar>
 
+    <!-- STATS -->
     <b-sidebar
       class="archaeon-panel"
       type="is-light"
@@ -328,8 +335,8 @@
 
         <!-- ROW (TOP TOOL BAR) -->
         <div class="menu">
-
-
+          
+          <!-- DISCORD BOT  -->
           <b-switch v-model="discordBot.on"
             @input="onTurnOnDiscordBotKillfeed"
             type="is-success"
@@ -337,6 +344,8 @@
             >
               <span style="color:white;">Killfeed</span>
           </b-switch>
+
+          <!-- SERVER LOG FEED -->
           <b-switch v-model="turnOnPlayerStats"
             @input="onTurnOnPlayerStats"
             type="is-success"
@@ -346,18 +355,21 @@
               <span v-if="playerStats.busy" style="color:white;">Stats (busy)</span>
           </b-switch>
 
-          <b-switch v-model="registerServer"
+          <!-- REGISTER SERVER -->
+          <b-switch v-model="serverRegistered"
             @input="onRegisterServer"
-            type="is-success"
-            :disabled="!accountForm.nitradoApiKey || !selectedServer || registerServer"
+            :disabled="!accountForm.nitradoApiKey || !selectedServer"
+            :loading="registerServer.busy"
             >
               <span style="color:white;">Register Server</span>
           </b-switch>
 
+          <!-- PUBLISH SERVER -->
           <b-switch v-model="publishServerFeed"
             @input="onPublishServerFeed"
             type="is-success"
-            :disabled="!accountForm.nitradoApiKey || !selectedServer || !registerServer"
+            :disabled="!accountForm.nitradoApiKey || !selectedServer || !serverRegistered"
+            :loading="publishServer.busy"
             >
               <span style="color:white;">Publish Server Feed</span>
           </b-switch>
@@ -496,12 +508,23 @@ export default {
   mixins: [vueWindowSizeMixin],
   data () {
     return {
-      selectedServerAccess: {
+      bank: {
+        accounts: {}
+      },
+      bounties: {
+        list: []
+      },
+      publishServer: {
         busy: false,
         error: false,
         publish: false
       },
-      registerServer: false,
+      registerServer: {
+        busy: false,
+        error: null,
+        publish: false
+      },
+      serverRegistered: false,
       publishServerFeed: false,
       serverLog: ``,
       playerStats: {
@@ -614,8 +637,26 @@ export default {
     }
   },
   methods: {
+    isServerRegistered (sid) {
+      const isServerRegistered = this.user.servers ? this.user.servers.filter(server => `${server.snitradoserviceid}` === `${sid}`).length > 0 : false
+      if (isServerRegistered) {
+        this.serverRegistered = true
+      }
+      return isServerRegistered
+    },
+    isServerPublished (sid) {
+      const isServerPublished = this.user.servers ? this.user.servers.filter(server => `${server.snitradoserviceid}` === `${sid}`).reduce((a,c) => c.sactive > 0 ? true : false, false) : false
+      if (isServerPublished) {
+        this.publishServerFeed = true
+      }
+      return isServerPublished
+    },
     async onRegisterServer (value) {
       if (value === true) {
+        this.registerServer.error = null
+        this.registerServer.success = false
+        this.registerServer.busy = true
+        console.log('using', this.selectedService.id, this.selectedService)
         try {
           const body = {
             name: this.selectedService.details.name,
@@ -625,43 +666,50 @@ export default {
               withCredentials: true,
               emulateJSON: true
           })
-          this.success = true
-          this.busy = false
+          this.registerServer.success = true
         } catch (e) {
-          this.selectedServerAccess.error = e
+          this.registerServer = false
+          this.registerServer.error = e
           console.log(e)
         }
-      } else {
-
+        this.registerServer.busy = false
       }
     },
     async onPublishServerFeed (value) {
       if (value === true) {
         try {
+          this.publishServer.error = null
+          this.publishServer.success = false
+          this.publishServer.busy = true
+          const sid = this.selectedService.id
           const body = {}
           const response = await this.$http.put(`http://localhost:8001/api/v2/servers/${sid}/live`, body, {
-              withCredentials: true,
-              emulateJSON: true
+            withCredentials: true,
+            emulateJSON: true
           })
-          this.success = true
-          this.busy = false
+          this.publishServer.success = true
         } catch (e) {
-          this.selectedServerAccess.error = e
+          this.publishServer.error = e
           console.log(e)
         }
+        this.publishServer.busy = false
       } else {
         try {
+          this.publishServer.error = null
+          this.publishServer.success = false
+          this.publishServer.busy = true
+          const sid = this.selectedService.id
           const body = {}
           const response = await this.$http.delete(`http://localhost:8001/api/v2/servers/${sid}/live`, body, {
-              withCredentials: true,
-              emulateJSON: true
+            withCredentials: true,
+            emulateJSON: true
           })
-          this.success = true
-          this.busy = false
+          this.publishServer.success = true
         } catch (e) {
-          this.selectedServerAccess.error = e
+          this.publishServer.error = e
           console.log(e)
         }
+        this.publishServer.busy = false
       }
     },
     parseServerLogFromString (serverLogString) {
@@ -1062,6 +1110,38 @@ export default {
                 // message.channel.send({ embed: attachment })
               })
           }
+          // !bounties add 1000 sundaysatan
+          if (message.content.substring(0,9) === '!bounties') {
+            if (message.content.substring(10,13) === 'add') {
+              const reward = message
+                .content
+                .split(' ')
+                .filter(x => parseInt(x))
+                .filter((x,i) => i < 1)
+                .reduce((a,c) => parseInt(c), -1)
+              const playerName = message.content.substring(15 + (`${reward}`.length), message.content.length)
+              if ((reward > 0) && (playerName.length > 0)) {
+                const wanted = this.playerStats.kills.filter(kill => kill.player === playerName)
+                if (wanted.length > 0) {
+                  this.bounties.list.push({
+                    reward, playerName
+                  })
+                  message.channel.send(`New bounty worth c${reward} on _${playerName}_.`)
+                } else {
+                  message.channel.send(`Player _${playerName}_ not found or hasn't killed anyone.`)
+                }
+              }
+            } else if (message.content.substring(10,14) === 'list') {
+              const bounties = this.bounties.list
+                .map(({ playerName, reward }) => `c${reward} for ${playerName}\n`)
+                .reduce((a,c) => `${a}${c}`, ``)
+              const bountiesWrapper = `\`\`\` # | credits | survivor\n${bounties}\`\`\``
+              console.log(bounties)
+              message.channel.send(bounties)
+            } else {
+              message.channel.send(`usage: !bounties <add,list> <amount> <player>\n\te.g., !bounties add 1000 sundaysatan\n\te.g., !bounties list`)
+            }
+          }
           // const guildMembers = message.mentions.members.array()
           // guildMembers.filter(({ user }) => user.username === 'rooster')
           //   .forEach(() => {
@@ -1137,6 +1217,20 @@ export default {
                     feed = meters === `0` ? feed : `${feed} from ${meters} meters`
                     feed = `${feed}.`
                     experimental.send(feed)
+                    const claimedBounties = this.bounties.list
+                      .filter(bounty => bounty.playerName === victim)
+                    const reward = claimedBounties.reduce((a,c) => a + (c.reward), 0)
+                    claimedBounties.forEach(claimedBounty => {
+                      this.bounties.list = this.bounties.list.filter(bounty => bounty.playerName !== victim)
+                      experimental.send(`Bounty claimed on _${victim}_ for c${claimedBounty.reward} by __${killer}__!`)
+                    })
+                    if (this.bank.accounts[killer]) {
+                      this.bank.accounts[killer].balance = this.bank.accounts[killer].balance + reward
+                    } else {
+                      this.bank.accounts[killer] = {
+                        balance: reward
+                      }
+                    }
                   }
                 })
             }
@@ -1689,6 +1783,11 @@ div.dialog.modal {
 
 #archaeon-terminal-toggle > button, #archaeon-terminal-toggle > div {
   margin-right: 5px;
+}
+
+div.media-content > span.tag:not(body) {
+  height: 1em;
+  margin-left:5px;
 }
 
 </style>

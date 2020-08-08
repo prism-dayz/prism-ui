@@ -13,7 +13,16 @@ const { Strategy: RememberMeStrategy } = require('passport-remember-me')
 const PostgreSqlStore = require('connect-pg-simple')(session)
 const { version } = require('../package.json')
 const discord = require('discord.js')
-const utils = require('./utils')
+const {
+  randomString,
+  doNitradoFileServerApiProper,
+  doNitradoFileServerApi,
+  getWsConnection,
+  getGameserver,
+  doNitradoFileServer,
+  doNitradoApi
+} = require('./utils')
+const stream = require('stream')
 
 // helpers functions
 const authorized = () => {
@@ -66,16 +75,33 @@ const db = {
   }
 }
 
-const simpleQuery = async (req, res, query = '', params = []) => {
+const simpleQuery = async (req, res, query = '', params = [], cb = () => {}, compress = false) => {
   try {
     const result = await db.query(query, params)
-    res.send(result.rows)
+    if (compress === true) {
+      res.send([result.rows.reduce((a,c) => {
+        const { servers } = { servers: [], ...a }
+        const { sid, sname, sactive, sborn, snitradoserviceid, ...rest } = c
+        console.log(sid, sname, sactive, sborn, snitradoserviceid)
+        return {
+          ...rest,
+          servers: [
+            ...servers,
+            { sid, sname, sactive, sborn, snitradoserviceid }
+          ]
+        }
+      }, [])])
+    } else {
+      res.send(result.rows)
+    }
+    cb(null)
     res.end()
   } catch (error) {
     console.log(error)
     res.status(500)
     res.send(error)
     res.end()
+    cb(e)
   }
 }
 
@@ -84,6 +110,8 @@ try {
 } catch (error) {
   console.log('could not connect to db', error)
 }
+
+const killFeedTimeouts = []
 
 // configure passport
 const localStrategyConfig = {
@@ -139,7 +167,7 @@ const rememberMeStrategyHandler = async (token, callback) => {
 }
 
 const issueTokenHandler = async (user, callback) => {
-  var token = utils.randomString(64)
+  var token = randomString(64)
   const { id } = user
   try {
     // has to be insert
@@ -161,7 +189,13 @@ passport.serializeUser((user, done) => {
 passport.deserializeUser(async (id, done) => {
   //console.log('deserialize', id)
   // find user and user id in database, and pass it second param
-  const query = 'select uid, uname, uborn from users where uid = $1'
+  const query = `
+    select uid, uname, uborn,
+      convert_from(decrypt(nakey::bytea, 'secret-key', 'bf'), 'utf-8') as nakey,
+      convert_from(decrypt(dakey::bytea, 'secret-key', 'bf'), 'utf-8') as dakey, 
+      uemail
+    from users where uid = $1
+    `
   const params = [id]
   const result = await db.query(query, params)
   //console.log('result deserialize', result.rows)
@@ -243,9 +277,22 @@ app.get('/api/v2/users/:username', db.connected(), authorized(), (req, res) => {
   const { username } = params
   console.log('user', user, username)
   if (user.uname === username) {
-    simpleQuery(req, res, "select uname, uborn, convert_from(decrypt(nakey::bytea, 'secret-key', 'bf'), 'utf-8') as nakey, convert_from(decrypt(dakey::bytea, 'secret-key', 'bf'), 'utf-8') as dakey from users where uname = $1", [username])
+    simpleQuery(
+      req, res, 
+      // `select a.uname, a.uborn,
+      //   convert_from(decrypt(a.nakey::bytea, 'secret-key', 'bf'), 'utf-8') as nakey,
+      //   convert_from(decrypt(a.dakey::bytea, 'secret-key', 'bf'), 'utf-8') as dakey
+      //   from users a where a.uname = $1`,
+      `select a.uname, a.uborn,
+        convert_from(decrypt(a.nakey::bytea, 'secret-key', 'bf'), 'utf-8') as nakey,
+        convert_from(decrypt(a.dakey::bytea, 'secret-key', 'bf'), 'utf-8') as dakey,
+        b.* from users a, servers b where a.uname = $1 and b.uid = a.uid`,
+      [username],
+      () => {},
+      true // compress
+    )
   } else {
-    simpleQuery(req, res, "select uname, uborn from users where uid = $1", [user.uid])
+    simpleQuery(req, res, "select uname, uborn from users where uname = $1", [username])
   }
 })
 
@@ -255,17 +302,276 @@ app.put('/api/v2/users/:username', db.connected(), authorized(), upload.none(), 
   simpleQuery(req, res, `update users set nakey = encrypt($1, 'secret-key', 'bf'), dakey = encrypt($3, 'secret-key', 'bf') where uname = $2`, [nitradoApiKey, user.uname, discordApiKey])
 })
 
-app.put('/api/v2/servers/:sid/live', db.connected(), authorized(), (req, res) => {
-  // http://localhost:8001/api/v2/servers/${sid}/live
-  const { sid } = params
+app.get('/api/v2/servers', db.connected(), authorized(), (req, res) => {
+  simpleQuery(req, res, `select sid, sname, sborn, sactive from servers`)
+})
+
+app.post('/api/v2/servers', db.connected(), authorized(), upload.none(), async (req, res) => {
   try {
-    const
+    const { body, user } = req
+    const { name, nitradoServiceId } = body
+    await new Promise(async (resolve, reject) => {
+      const query = `select sid, sname, sborn, sactive, uid from servers where snitradoserviceid = $1`
+      const parameters = [nitradoServiceId]
+      const result = await db.query(query, parameters)
+      if (result.rows.length === 0) {
+        resolve(result)
+      } else {
+        reject(result)
+      }
+    })
+    // will error if exists, else continue and insert
+    const result = await new Promise(async (resolve, reject) => {
+      try {
+        const query = `
+          insert into servers (sname, snitradoserviceid, uid)
+          values ($1, $2, $3)
+          returning sname, sid, sborn, sactive, uid, snitradoserviceid
+        `
+        console.log('insert into servers', name, nitradoServiceId, user.uid)
+        const parameters = [name, nitradoServiceId, user.uid]
+        const result = await db.query(query, parameters)
+        console.log('result', result.rows.length)
+        if (result.rows.length > 0) {
+          resolve(result)
+        } else {
+          reject(result)
+        }
+      } catch (error) {
+        reject(error)
+      }
+    })
+    res.status(201)
+    res.send(result.rows)
+    res.end()
   } catch (e) {
-    console.log(error)
-    res.status(500)
-    res.send(error)
+    console.log('error servers post', e)
+    res.status(409)
+    res.send(e)
     res.end()
   }
+})
+
+const handleStatsDownload = (url) => {
+  return new Promise((resolve, reject) => {
+    const method = 'GET'
+    const path = url
+    console.log('doing ', method, path)
+    doNitradoFileServer(method, path, (response) => {
+      console.log('resolved', path)
+      const serverLog = response
+      resolve(serverLog)
+    }, (error) => {
+      console.log('did not resolve')
+      reject(error)
+    })
+  })
+}
+
+const getServerLog = (sid, user, file, gameserver) => {
+  return new Promise(async (resolve, reject) => {
+    const authBearer = user.nakey
+    const method = 'GET'
+    const path = `/services/${sid}/gameservers/file_server/download?file=${file}`
+    console.log('doing ', method, path)
+    doNitradoApi(method, path, async (response) => {
+      console.log('resolved', path)
+      const serverLog = await handleStatsDownload(JSON.parse(response.body).data.token.url)
+      resolve(serverLog)
+    }, (error) => {
+      console.log('did not resolve')
+      reject(error)
+    }, authBearer)
+  })
+}
+
+const updateServerLogStore = async (sid, user, ftpPath, size) => {
+  const { uid } = user
+  try {
+    const query = `update servers set sloglastsize = $1, sloglastftppath = $2 where snitradoserviceid = $3 and uid = $4`
+    const params = [parseInt(size), ftpPath, parseInt(sid), uid]
+    const result = await db.query(query, params)
+  } catch (error) {
+    console.log(error)
+    destroyLiveKillFeed(sid)
+  }
+}
+
+const parseServerLog = async (sid, user, serverLog, ftpPath, recentSize) => {
+  console.log('got new server log content')
+  // update the database with the stats
+  const lines = serverLog.body.split('\n').filter(line => line.length > 0)
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    console.log(line)
+    let match = null
+    let lineTypes = [
+      'is connected',
+      'has been disconnected',
+      'hit by Player',
+      'hit by Infected',
+      'hit by FallDamage',
+      'killed by Player',
+      '##### PlayerList',
+      '\>\\)$'
+    ]
+
+    match = line.match(/[0-9]*:[0-9]*:[0-9]*/g)
+    const time = match ? match[0] : 'Unknown'
+
+    const type = lineTypes.filter(lineType => {
+      const regex = new RegExp(`${lineType}`)
+      return line.match(regex)
+    }).reduce((a,b) => b, ``)
+
+
+
+  }
+  // do this again in 5 minutes (or try and get last timestamp and do it 5 minutes from then)
+  const t = setTimeout(() => {
+    initLiveKillFeed(sid, user)
+  }, 60000 * 5)
+  setTimeout(() => { console.log('1min passed since set timeout for next killfeed') }, 60000)
+  setTimeout(() => { console.log('2min passed since set timeout for next killfeed') }, 60000 * 2)
+  setTimeout(() => { console.log('3min passed since set timeout for next killfeed') }, 60000 * 3)
+  setTimeout(() => { console.log('4min passed since set timeout for next killfeed') }, 60000 * 4)
+  setTimeout(() => { console.log('5min passed since set timeout for next killfeed') }, 60000 * 5)
+  killFeedTimeouts.push({ i: t, sid })
+  // store the new log size
+  updateServerLogStore(sid, user, ftpPath, recentSize)
+}
+
+const initLiveKillFeed = async (sid, user) => {
+  // go get server logs info from gameserver service
+  const authBearer = user.nakey
+  const gameserver = await getGameserver({ id: sid }, authBearer)
+  const { log_files } = gameserver.game_specific
+  // if there aren't any logs
+  if (log_files.length < 0) {
+    // check back in two minutes
+    console.log('try back in two minutes')
+    const i = setTimeout(() => {
+      console.log('trying back')
+      initLiveKillFeed(sid, user)
+    }, 60000 * 2)
+    killFeedTimeouts.push({ i, sid })
+    return
+  }
+  // if there's a server log file
+  const serverLogPath = log_files[0].replace('dayzxb/','')
+  // then fetch that server log's most recent size
+  const lastServerLogSizeFromREST = await new Promise(async (resolve, reject) => {
+    const method = `GET`
+    const path = `/services/${sid}/gameservers/file_server/size?path=${gameserver.game_specific.path}${serverLogPath}`
+    doNitradoApi(method, path, async (response) => {
+      console.log('resolved', path)
+      const serverLogSize = JSON.parse(response.body).data.size
+      resolve(serverLogSize)
+    }, (error) => {
+      console.log('did not resolve')
+      resolve(0)
+    }, authBearer)
+  })
+  // go get last server log's size from db
+  const lastServerLogFromStore = await new Promise(async (resolve, reject) => {
+    const query = `select * from servers where snitradoserviceid = $1`
+    const parameters = [sid]
+    const result = await db.query(query, parameters)
+    if (result.rows.length > 0) {
+      resolve(result.rows)
+    } else {
+      resolve([])
+    }
+  })
+  const lastServerLogSizeFromStore = lastServerLogFromStore.reduce((a,c) => c.sloglastsize, 0)
+  // calculate offset
+  const length = lastServerLogSizeFromREST - lastServerLogSizeFromStore
+  console.log('>>>>>>> length', lastServerLogSizeFromREST, lastServerLogSizeFromStore, length)
+  // if offset is zero there's no change
+  if (length === 0) {
+    // there are logs, but no change in logs
+    // do this again in two minutes
+    console.log('try back in two minutes')
+    const i = setTimeout(() => {
+      console.log('trying back')
+      initLiveKillFeed(sid, user)
+    }, 60000 * 2)
+    killFeedTimeouts.push({ i, sid })
+    return
+  }
+  // length is greater than zero so go get it
+  const maxSafeSeek = 64512
+  if (length > maxSafeSeek) {
+    // use file download
+    const serverLog = await getServerLog(sid, user, `${gameserver.game_specific.path}${serverLogPath}`, gameserver)
+    // parse it
+    console.log('got server log', `${gameserver.game_specific.path}${serverLogPath}`)
+    parseServerLog(sid, user, serverLog, `${gameserver.game_specific.path}${serverLogPath}`, lastServerLogSizeFromREST)
+  } else {
+    // if there's a safe sized seek
+    // fetch the single-use url to the seek using length (i.e., the seek is the subset of the file, in our case the delta which is the new stuff)
+    const singleUseUrlResponse = await new Promise((resolve, reject) => {
+      const method = 'GET'
+      const search = `?file=${gameserver.game_specific.path}${serverLogPath}&offset=${lastServerLogSizeFromStore}&length=${length}`
+      const path = `/services/${sid}/gameservers/file_server/seek${search}`
+      doNitradoApi(method, path, async (response) => {
+        resolve(JSON.parse(response.body))
+      }, (error) => {
+        console.log(`could not acquire single-use fileserver url for requested seek/file '${search}'`)
+        resolve({ data: { url: null, token: null } })
+      }, authBearer)
+    })
+    const { data } = singleUseUrlResponse
+    console.log('singleUseUrlResponse', singleUseUrlResponse)
+    const { token: _token } = data
+    const { url: serverLogUrl, token } = _token
+    console.log('url', serverLogUrl)
+    // if serverLogUrl && token
+    // fetch seek of file
+    if (!serverLogUrl || !token) {
+      // this is essentially an error, try again in two minutes
+      console.log('no serverLogUrl or token', serverLogUrl, token)
+      console.log('try back in two minutes')
+      const i = setTimeout(() => {
+        console.log('trying back')
+        initLiveKillFeed(sid, user)
+      }, 60000 * 2)
+      killFeedTimeouts.push({ i, sid })
+      return
+    }
+    // get server log
+    const serverLog = await new Promise((resolve, reject) => {
+      const method = 'GET'
+      doNitradoFileServerApiProper(method, serverLogUrl, token, resolve, reject)
+    })
+    // parse it
+    console.log('got server log', serverLogUrl)
+    parseServerLog(sid, user, serverLog, `${gameserver.game_specific.path}${serverLogPath}`, lastServerLogSizeFromREST)
+  }
+  // nothing else to do, done
+}
+
+const destroyLiveKillFeed = (sid) => {
+  const interval = killFeedTimeouts.filter((k) => k.sid === sid)
+  interval.forEach(i => clearInterval(i))
+}
+
+app.put('/api/v2/servers/:sid/live', db.connected(), authorized(), (req, res) => {
+  const { params, user } = req
+  const { sid } = params
+  const { uid } = user
+  simpleQuery(req, res, `update servers set sactive = 1 where snitradoserviceid = $1 and uid = $2`, [parseInt(sid), uid], () => {
+    initLiveKillFeed(sid, user)
+  })
+})
+
+app.delete('/api/v2/servers/:sid/live', db.connected(), authorized(), (req, res) => {
+  const { params, user } = req
+  const { sid } = params
+  const { uid } = user
+  simpleQuery(req, res, `update servers set sactive = 0 where snitradoserviceid = $1 and uid = $2`, [parseInt(sid), uid], () => {
+    destroyLiveKillFeed(sid)
+  })
 })
 
 app.get('/api/v2/me', db.connected(), authorized(), (req, res) => {
@@ -317,6 +623,7 @@ app.post('/api/v2/register', db.connected(), upload.none(), async (req, res) => 
   try {
     const { body } = req
     const { email, username, password } = body
+    // first check see if already exists
     await new Promise(async (resolve, reject) => {
       const query = `select uname from users where uname = $1`
       const parameters = [username]
@@ -327,6 +634,7 @@ app.post('/api/v2/register', db.connected(), upload.none(), async (req, res) => 
         reject(result)
       }
     })
+    // will error if exists, else continue and insert
     const result = await new Promise(async (resolve, reject) => {
       try {
         const query = `
@@ -352,7 +660,7 @@ app.post('/api/v2/register', db.connected(), upload.none(), async (req, res) => 
     res.end()
   } catch (error) {
     console.log(error)
-    res.status(500)
+    res.status(401)
     res.send(error)
     res.end()
   }

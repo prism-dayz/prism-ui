@@ -26,15 +26,17 @@ insert into users (
 create table servers (
   sid serial primary key not null,
   sname varchar(128) unique not null,
-  snitradoServiceId varchar(64) unique not null,
+  snitradoserviceid varchar(64) unique not null,
   sborn date not null default now(),
   sactive integer not null default 0,
+  sloglastsize integer not null default 0,
+  sloglastftppath varchar default null,
   uid integer not null,
   foreign key (uid) references users(uid)
 );
 
 create table players (
-  pid serial primary key not null,
+  pid varchar(128) primary key not null,
   pxboxid varchar(128) not null,
   pname varchar(64) not null,
   sid integer not null,
@@ -49,7 +51,7 @@ create table alltimestats (
   ameters numeric not null default 0,
   asurvivetime integer not null default 0,
   akstreak integer not null default 0,
-  pid integer not null,
+  pid varchar(128) not null,
   foreign key (pid) references players(pid)
 );
 
@@ -61,7 +63,7 @@ create table currentstats (
   cmeters numeric not null default 0,
   csurvivetime integer not null default 0,
   ckstreak integer not null default 0,
-  pid integer not null,
+  pid varchar(128) not null,
   foreign key (pid) references players(pid)
 );
 
