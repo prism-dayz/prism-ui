@@ -183,7 +183,10 @@
           </b-button>
 
           <!-- SETTINGS SELECTION -->
-          <b-dropdown v-model="selectedGameserverSetting" aria-role="list" :disabled="!accountForm.nitradoApikey">
+          <b-dropdown
+            class="archaeon-deploy-settings-dropdown"
+            v-model="selectedGameserverSetting" aria-role="list" :disabled="!selectedServer"
+            >
               <button class="button is-info is-small" type="button" style="margin-right:5px;" slot="trigger" outlined>
                   <template v-if="selectedGameserverSetting.id">
                       <b-icon icon="tasks"></b-icon>
@@ -211,6 +214,8 @@
           <!-- DEPLOY -->
           <b-button type="is-warning" size="is-small" style="margin-right:5px;" icon-left="sign-out-alt"
             :disabled="!accountForm.nitradoApiKey || !selectedGameserverSetting.id"
+            @click="onHardDeploy(selectedService.id)"
+            :loading="hardDeploying"
             >
            Hard Deploy
           </b-button>
@@ -310,7 +315,12 @@
 
           <!-- XML EDITOR -->
           <div style="flex-grow:2">
-            <div id="archaeon-xml-editor" style="height:800px;">
+
+              <div v-if="fileUploadInitialized">
+                <DayzXMLTree :files="selectedFile ? [selectedFile] : []" />
+              </div>
+
+            <div id="archaeon-xml-editor" style="height:585px;">
               
             </div>
           </div>
@@ -488,6 +498,7 @@ import { Uint8ArrayToStringsTransformer } from '@/utils'
 import { Client, MessageEmbed, MessageAttachment, RichEmbed } from 'discord.js'
 import html2canvas from 'html2canvas'
 import { Buffer } from 'buffer'
+import DayzXMLTree from '@/components/DayzXMLTree'
 
 const getIZurvive = () => new Promise((resolve, reject) => {
     const i = setInterval(() => {
@@ -506,8 +517,19 @@ const readyiZurvive = (state) => new Promise((resolve, reject) => {
 export default {
   name: 'app',
   mixins: [vueWindowSizeMixin],
+  components: {
+    DayzXMLTree,
+    AccountModal,
+    LoginButton,
+    LogoutButton,
+    RegisterModal,
+    LoginModal
+  },
   data () {
     return {
+      selectedFile: null,
+      fileUploadInitialized: false,
+      hardDeploying: false,
       bank: {
         accounts: {}
       },
@@ -610,13 +632,6 @@ export default {
         terminal.scrollTop = terminal.scrollHeight
       })
     }
-  },
-  components: {
-    AccountModal,
-    LoginButton,
-    LogoutButton,
-    RegisterModal,
-    LoginModal
   },
   async mounted () {
     this.onTraffic()
@@ -1002,8 +1017,8 @@ export default {
         const prefix = '!'
 
         client.once('ready', () => {
-          client.guilds.cache.find(guild => console.log(guild))
-          const experimental = client.channels.cache.find(channel => channel.name === 'killbox')
+          // client.guilds.cache.find(guild => console.log(guild))
+          // const experimental = client.channels.cache.find(channel => channel.name === 'killbox')
           // experimental.send('i have been summoned')
         })
 
@@ -1198,7 +1213,7 @@ export default {
               const newLines = this.serverLog.substring(this.serverLogPrevLength, this.serverLog.length)
               newLines.split('\n')
                 .forEach(value => {
-                  if (value.match(/killed by Player/g)) {
+                  if (value.match(/killed by Player/g) && false) {
                     console.log(value)
                     const victim = value.match(/\|\sPlayer\s\"[a0-z9\s\/]*\"/g)
                       .reduce((a,c) => c.split('"')[1], ``)
@@ -1277,7 +1292,7 @@ export default {
     },
     async restoreGameServerSettings (sid, setId) {
       const method = 'POST'
-      const path = `/services/${sid}/gameservers/settings/sets/${stid}/restore`
+      const path = `/services/${sid}/gameservers/settings/sets/${setId}/restore`
       const response = await this.nitradoApiRequest(method, path)
       console.log('restore settings response', response)
       return response
@@ -1346,6 +1361,17 @@ export default {
         resolve()
       })
     },
+    async onHardDeploy (sid) {
+      this.hardDeploying = false
+      const method = `POST`
+      const path = `/services/${sid}/gameservers/games/install?game=dayzxb`
+      try {
+        const response = await this.nitradoApiRequest(method, path)
+        this.hardDeploying = true
+      } catch (e) {
+        console.log(e)
+      }
+    },
     connectToWebSocket (sid, wstoken) {
       return new Promise((resolve, reject) => {
         const ws = new WebSocket('wss://websocket.nitrado.net/')
@@ -1379,27 +1405,28 @@ export default {
             const sid = this.selectedService.id
             const gameserver = this.selectedServer.data.gameserver
             const ftpuname = gameserver.credentials.ftp.username
-            const files = null
+            const files = this.files
             if (wsMessage.type === 'service-log') {
-              this.terminalOutput.push(`> reinstalling gameserver since ${wsMessage.data.created_at}`)
+              this.terminalOutput.push(`deploy> reinstalling gameserver since ${wsMessage.data.created_at}`)
             } else if (wsMessage.type === 'status') {
               const serverState = wsMessage.data
-              this.terminalOutput.push(`> gameserver is ${serverState}`)
+              this.terminalOutput.push(`deploy> gameserver is ${serverState}`)
               if (serverState === 'started') {
                 if (!this.lastRestart) {
                   this.lastRestart = true
-                  this.terminalOutput.push(`> reinstalled`)
+                  this.terminalOutput.push(`deploy> reinstalled`)
                   this.stopGameserver(sid)
                 } else {
                   this.lastRestart = false
-                  this.terminalOutput.push(`> deploy complete`)
+                  this.terminalOutput.push(`deploy> success`)
+                  this.hardDeploying = false
                 }
               }
-              if ((serverState === 'stopped') && lastRestart) {
-                this.terminalOutput.push(`> restoring settings ${setId}`)
+              if ((serverState === 'stopped') && this.lastRestart) {
+                this.terminalOutput.push(`deploy> restoring settings ${setId}`)
                 await this.restoreGameServerSettings(sid, setId)
-                this.terminalOutput.push(`> uploading xml files to ${ftpuname}`)
-                await this.uploadFilesToGameserver(sid, ftpuname, files, res)
+                this.terminalOutput.push(`deploy> uploading xml files to ${ftpuname}`)
+                await this.uploadFilesToGameserver(sid, ftpuname, files)
                 await this.startGameserver(sid)
               }
             } else {
@@ -1506,8 +1533,11 @@ export default {
         this.onCommit()
       }
       this.loadedFile = { fileContent, path: paths.join('/') }
-      const content = this.files
+      const files = this.files
         .filter(file => file.path === this.loadedFile.path)
+      this.selectedFile = files
+        .reduce((a, c) => c, null)
+      const content = files
         .reduce((a, c) => c.contents, ``)
       this.editor.session.setValue(content)
       this.unsavedChanges = false
@@ -1532,24 +1562,31 @@ export default {
 
       schema[pList[len - 1]] = value
     },
-    onOpenFile (file) {
-      const { webkitRelativePath } = file
-      const reader = new FileReader()
-      reader.onload = (event) => {
-        const { target: { result } } = event
-        const filePath = webkitRelativePath
-        this.files.push({
-          path: filePath,
-          contents: result
-        })
-        this.deepObjectSet(filePath, result)
-        this.$forceUpdate()
-      }
-      reader.readAsText(file)
+    onOpenFile (file, i) {
+      return new Promise((resolve, reject) => {
+        const { webkitRelativePath } = file
+        const reader = new FileReader()
+        reader.onload = (event) => {
+          const { target: { result } } = event
+          const filePath = webkitRelativePath
+          this.files.push({
+            path: filePath,
+            contents: result
+          })
+          this.deepObjectSet(filePath, result)
+          resolve()
+        }
+        reader.readAsText(file)
+      })
     },
-    onOpenFiles (event) {
+    async onOpenFiles (event) {
       const { target: { files } } = event
-      files.forEach(this.onOpenFile)
+      this.fileUploadInitialized = false
+      await Array.from(files).reduce(async (a, c, i) => {
+        await a
+        return this.onOpenFile(c, i)
+      }, Promise.resolve())
+      this.fileUploadInitialized = true
     },
     initResizeObserver () {
       const container = document.getElementsByClassName('sidebar-content')[0]
@@ -1788,6 +1825,25 @@ div.dialog.modal {
 div.media-content > span.tag:not(body) {
   height: 1em;
   margin-left:5px;
+}
+
+.archaeon-deploy-settings-dropdown > div.dropdown-menu > div.dropdown-content {
+  height: 200px;
+  overflow-y: scroll;
+}
+
+.menu-list a.is-active {
+  background-color: #3d3d3d !important;
+  color: white !important;
+}
+
+.menu-list a {
+  margin-top: 2px;
+  margin-bottom: 2px;
+}
+
+span.icon {
+  height: 5px;
 }
 
 </style>
