@@ -1,20 +1,19 @@
 <template>
   <b-menu :accordion="accordion" style="
-      border: 1px solid #4b4b4b;
       padding: 5px;
       background-color: #222;
       margin-bottom: 15px;
       height: 300px;
       overflow-y: scroll;
-    ">
+    " :style="{ 'border': getBorderColor() }">
     <b-menu-list label="Interactive Editor" :accordion="accordion">
-      <b-menu-item v-for="(branch, b) in getBranches" :key="b">
+      <b-menu-item v-for="(branch, b) in branches" :key="b" :disabled="freeze">
         <template slot="label" slot-scope="props">
           &lt;{{ branch.path }}&gt;
           <b-icon class="is-pulled-right" :icon="props.expanded ? 'menu-down' : 'menu-up'"></b-icon>
         </template>
 
-        <Tree :branches="[branch.xmlDoc.documentElement]" />
+        <Tree :branches="[branch.xmlDoc.documentElement]" :key="Math.random()" @mutate="$emit('evolve')" :freeze="freeze" />
 
       </b-menu-item>
     </b-menu-list>
@@ -26,18 +25,31 @@ import Tree from '@/components/Tree'
 const parser = new DOMParser()
 export default {
   name: 'DayzXMLTree',
-  props: ['files'],
+  props: ['files', 'freeze', 'dirty'],
   components: {
     Tree
   },
   data () {
+    const branches = this.files
+      .filter(f => f !== null)
+      .map(f => {
+        let contents = f.contents.replace(/[\t]*\<\!\-\-[\s]*[\n]*[a0-z9\s\t\n\-\+\.\|\'\/']*\-\-\>/g,'')
+        contents = contents.replace(/\n[\s]*/g,'')
+        contents = contents.replace(/[↵]*/g,'')
+        return {
+          ...f,
+          xmlDoc: parser.parseFromString(contents, 'text/xml')
+        }
+      })
     return {
-      accordion: false
+      accordion: false,
+      branches
     }
   },
   computed: {
     getBranches () {
       const branches = this.files
+        .filter(f => f !== null)
         .map(f => {
           let contents = f.contents.replace(/[\t]*\<\!\-\-[\s]*[\n]*[a0-z9\s\t\n\-\+\.\|\'\/']*\-\-\>/g,'')
           contents = contents.replace(/\n[\s]*/g,'')
@@ -48,6 +60,22 @@ export default {
           }
         })
       return branches
+    }
+  },
+  methods: {
+    getBorderColor () {
+      if (this.freeze) {
+        return `1px solid blue`
+      }
+      if (this.dirty) {
+        return `1px solid orange`
+      }
+      return `1px solid #4b4b4b;`
+    },
+    onEvolve (branch) {
+      const serializer = new XMLSerializer()
+      const xmlString = serializer.serializeToString(branch)
+      this.$emit('tree', xmlString)
     }
   }
 }

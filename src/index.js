@@ -84,13 +84,13 @@ const simpleQuery = async (req, res, query = '', params = [], cb = () => {}, com
     if (compress === true) {
       res.send([result.rows.reduce((a,c) => {
         const { servers } = { servers: [], ...a }
-        const { sid, sname, sactive, sborn, ...rest } = c
-        console.log(sid, sname, sactive, sborn)
+        const { sid, sname, sactive, sborn, schannel, sportlist, ...rest } = c
+        console.log('simpleQuery', sid, sname, sactive, sborn, schannel, sportlist)
         return {
           ...rest,
           servers: [
             ...servers,
-            { sid, sname, sactive, sborn }
+            { sid, sname, sactive, sborn, schannel, sportlist }
           ]
         }
       }, [])])
@@ -161,9 +161,9 @@ const updateServerLogStore = async (sid, user, ftpPath, size) => {
   }
 }
 
-const parseServerLog = async (sid, user, serverLog, ftpPath, /** actually newest size */ recentSize, startbytes = 0, shouldKillfeed = false) => {
+const parseServerLog = async (sid, user, serverLog, ftpPath, /** actually newest size */ recentSize, startbytes = 0, shouldKillfeed = false, schannel, sportlist) => {
 
-  console.log('got new server log content')
+  console.log('got new server log content', schannel)
 
   const newLog = serverLog.body.substring(startbytes, recentSize)
 
@@ -354,7 +354,7 @@ const parseServerLog = async (sid, user, serverLog, ftpPath, /** actually newest
 
               if (shouldKillfeed) {
                 // killfeed
-                const experimental = client.channels.cache.find(channel => channel.name === 'killbox')
+                const experimental = client.channels.cache.find(channel => channel.name === schannel)
                 let feed = `__${byPlayer}__ killed _${player}_ with ${weapon}`
                 feed = ((fromMeters === `0`) || (fromMeters === `0.0`) || (fromMeters === 0) || (fromMeters === 0.0)) ? feed : `${feed} from ${fromMeters} meters`
                 feed = `${feed}.`
@@ -362,15 +362,10 @@ const parseServerLog = async (sid, user, serverLog, ftpPath, /** actually newest
                 experimental.send(feed)
               }
 
-
-
             } catch (e) {
               console.log('could not update stats', e, line)
             }
-
             resolve()
-
-
           })
         })
 
@@ -406,21 +401,21 @@ const parseServerLog = async (sid, user, serverLog, ftpPath, /** actually newest
 
   // do this again in 5 minutes (or try and get last timestamp and do it 5 minutes from then)
   const t = setTimeout(() => {
-    initLiveKillFeed(sid, user)
+    initLiveKillFeed(sid, user, schannel, sportlist)
   }, 60000 * 5)
   // just additional timers for debugging/feedback
-  setTimeout(() => { console.log('1min passed since set timeout for next killfeed') }, 60000)
-  setTimeout(() => { console.log('2min passed since set timeout for next killfeed') }, 60000 * 2)
-  setTimeout(() => { console.log('3min passed since set timeout for next killfeed') }, 60000 * 3)
-  setTimeout(() => { console.log('4min passed since set timeout for next killfeed') }, 60000 * 4)
-  setTimeout(() => { console.log('5min passed since set timeout for next killfeed') }, 60000 * 5)
+  setTimeout(() => { console.log('1min passed since set timeout for next killfeed', schannel) }, 60000)
+  setTimeout(() => { console.log('2min passed since set timeout for next killfeed', schannel) }, 60000 * 2)
+  setTimeout(() => { console.log('3min passed since set timeout for next killfeed', schannel) }, 60000 * 3)
+  setTimeout(() => { console.log('4min passed since set timeout for next killfeed', schannel) }, 60000 * 4)
+  setTimeout(() => { console.log('5min passed since set timeout for next killfeed', schannel) }, 60000 * 5)
   // save this particular interval incase the feed it turned off
   killFeedTimeouts.push({ i: t, sid })
   // store the new log size
   updateServerLogStore(sid, user, ftpPath, recentSize)
 }
 
-const initLiveKillFeed = async (sid, user) => {
+const initLiveKillFeed = async (sid, user, schannel, sportlist) => {
   // go get server logs info from gameserver service
   const authBearer = user.nakey
   const gameserver = await getGameserver({ id: sid }, authBearer)
@@ -428,23 +423,24 @@ const initLiveKillFeed = async (sid, user) => {
   // if there aren't any logs
   if (log_files.length < 1) {
     // check back in two minutes
-    console.log('try back in two minutes')
+    console.log('try back in two minutes', schannel)
     const i = setTimeout(() => {
-      console.log('trying back')
-      initLiveKillFeed(sid, user)
+      console.log('trying back', schannel)
+      initLiveKillFeed(sid, user, schannel, sportlist)
     }, 60000 * 2)
     killFeedTimeouts.push({ i, sid })
     return
   }
   // if there's a server log file
-  const serverLogPath = log_files[0].replace('dayzxb/','')
+  const serverLogPath = log_files[0].replace(`${sportlist}/`,'')
   // then fetch that server log's most recent size
   const lastServerLogSizeFromREST = await new Promise(async (resolve, reject) => {
     const method = `GET`
     const path = `/services/${sid}/gameservers/file_server/size?path=${gameserver.game_specific.path}${serverLogPath}`
     doNitradoApi(method, path, async (response) => {
       console.log('resolved', path)
-      const serverLogSize = JSON.parse(response.body).data.size
+      const json = JSON.parse(response.body)
+      const serverLogSize = json.data ? json.data.size : 0
       resolve(serverLogSize)
     }, (error) => {
       console.log('did not resolve')
@@ -465,15 +461,15 @@ const initLiveKillFeed = async (sid, user) => {
   const lastServerLogSizeFromStore = lastServerLogFromStore.reduce((a,c) => c.sloglastsize, 0)
   // calculate offset
   const length = lastServerLogSizeFromREST - lastServerLogSizeFromStore
-  console.log('>>>>>>> length', lastServerLogSizeFromREST, lastServerLogSizeFromStore, length)
+  console.log('>>>>>>> length', schannel, lastServerLogSizeFromREST, lastServerLogSizeFromStore, length)
   // if offset is zero there's no change
   if (length === 0) {
     // there are logs, but no change in logs
     // do this again in two minutes
-    console.log('try back in two minutes')
+    console.log('try back in two minutes', schannel)
     const i = setTimeout(() => {
-      console.log('trying back')
-      initLiveKillFeed(sid, user)
+      console.log('trying back', schannel)
+      initLiveKillFeed(sid, user, schannel, sportlist)
     }, 60000 * 2)
     killFeedTimeouts.push({ i, sid })
     return
@@ -499,7 +495,7 @@ const initLiveKillFeed = async (sid, user) => {
     } catch (e) {
       console.log('could not update or create player', e, line)
     }
-    parseServerLog(sid, user, serverLog, `${gameserver.game_specific.path}${serverLogPath}`, lastServerLogSizeFromREST)
+    parseServerLog(sid, user, serverLog, `${gameserver.game_specific.path}${serverLogPath}`, lastServerLogSizeFromREST, 0, false, schannel, sportlist)
   } else if (length > maxSafeSeek) {
     // use file download
     const serverLog = await getServerLog(sid, user, `${gameserver.game_specific.path}${serverLogPath}`, gameserver)
@@ -514,7 +510,7 @@ const initLiveKillFeed = async (sid, user) => {
     } catch (e) {
       console.log('could not update or create player', e, line)
     }
-    parseServerLog(sid, user, serverLog, `${gameserver.game_specific.path}${serverLogPath}`, lastServerLogSizeFromREST, lastServerLogSizeFromStore + 1)
+    parseServerLog(sid, user, serverLog, `${gameserver.game_specific.path}${serverLogPath}`, lastServerLogSizeFromREST, lastServerLogSizeFromStore + 1, false, schannel, sportlist)
   } else {
     // if there's a safe sized seek
     // fetch the single-use url to the seek using length (i.e., the seek is the subset of the file, in our case the delta which is the new stuff)
@@ -539,10 +535,10 @@ const initLiveKillFeed = async (sid, user) => {
     if (!serverLogUrl || !token) {
       // this is essentially an error, try again in two minutes
       console.log('no serverLogUrl or token', serverLogUrl, token)
-      console.log('try back in two minutes')
+      console.log('try back in two minutes', schannel)
       const i = setTimeout(() => {
-        console.log('trying back')
-        initLiveKillFeed(sid, user)
+        console.log('trying back', schannel)
+        initLiveKillFeed(sid, user, schannel, sportlist)
       }, 60000 * 2)
       killFeedTimeouts.push({ i, sid })
       return
@@ -553,8 +549,8 @@ const initLiveKillFeed = async (sid, user) => {
       doNitradoFileServerApiProper(method, serverLogUrl, token, resolve, reject)
     })
     // parse it
-    console.log('got server log', serverLogUrl)
-    parseServerLog(sid, user, serverLog, `${gameserver.game_specific.path}${serverLogPath}`, lastServerLogSizeFromREST, 0, true)
+    console.log('got server log', schannel, serverLogUrl)
+    parseServerLog(sid, user, serverLog, `${gameserver.game_specific.path}${serverLogPath}`, lastServerLogSizeFromREST, 0, true, schannel, sportlist)
   }
   // nothing else to do, done
 }
@@ -571,6 +567,7 @@ const discordClient = new DiscordClient()
 const client = discordClient
 const prefix = '!'
 
+// killfeed bot
 client.once('ready', async () => {
   // client.guilds.cache.find(guild => console.log(guild))
   // const experimental = client.channels.cache.find(channel => channel.name === 'experimental')
@@ -1446,7 +1443,7 @@ client.on('message', async message => {
   }
 })
 
-client.login(`Njk5MDMxMTM4ODAyNTk3OTE4.XpOdeg.eEpW3Hf7g2Oyijpwx_x8X0Thc7c`)
+client.login(`Njk5MDMxMTM4ODAyNTk3OTE4.XpOdeg.k0DOV7ZTMqjwK0mmrm1211ZKYa4`)
 
 const bailbondsClient = new DiscordClient()
 
@@ -1520,7 +1517,7 @@ bailbondsClient.on('message', async (message) => {
   }
 })
 
-bailbondsClient.login('NzQxNzAyNTgxMTg0NjI2Nzk4.Xy7aWw.ZPSXU31BnKRRazJWq_aoWBfUzIU')
+// bailbondsClient.login('NzQxNzAyNTgxMTg0NjI2Nzk4.Xy7aWw.ZPSXU31BnKRRazJWq_aoWBfUzIU')
 
 // @archaeon link #inception-servers <nitrado_service_id>
 
@@ -1591,7 +1588,7 @@ archaeonClient.on('message', async (message) => {
   }
 })
 
-archaeonClient.login('NzUwNDYwNDMxNDc0MjI5MzYx.X062vQ.s0TB1-zFsLgJNXfFioKIvXs0-zA')
+// archaeonClient.login('NzUwNDYwNDMxNDc0MjI5MzYx.X062vQ.s0TB1-zFsLgJNXfFioKIvXs0-zA')
 
 const killFeedTimeouts = []
 
@@ -1840,12 +1837,12 @@ app.post('/api/v2/servers', db.connected(), authorized(), upload.none(), async (
   }
 })
 
-app.put('/api/v2/servers/:sid/live', db.connected(), authorized(), (req, res) => {
+app.put('/api/v2/servers/:sid/:sportlist/live/:schannel', db.connected(), authorized(), (req, res) => {
   const { params, user } = req
-  const { sid } = params
+  const { sid, schannel, sportlist } = params
   const { uid } = user
-  simpleQuery(req, res, `update servers set sactive = 1 where sid = $1 and uid = $2`, [parseInt(sid), uid], () => {
-    initLiveKillFeed(sid, user)
+  simpleQuery(req, res, `update servers set sactive = 1, schannel = $3, sportlist = $4 where sid = $1 and uid = $2`, [parseInt(sid), uid, schannel, sportlist], () => {
+    initLiveKillFeed(sid, user, schannel, sportlist)
   })
 })
 

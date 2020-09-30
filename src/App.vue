@@ -77,11 +77,11 @@
         <b-button v-if="!services.length" type="is-dark" @click="onGetServices" :loading="servicesBusy" :disabled="!accountForm.nitradoApiKey">
           <b-icon icon="taxi"></b-icon>
         </b-button>
-        <b-dropdown v-else v-model="selectedService" aria-role="list">
+        <b-dropdown v-else v-model="selectedService" aria-role="list" @change="onChangeSelectedService">
             <button class="button" :class="{ 'is-warning': !selectedService, 'is-primary': selectedService }" type="button" slot="trigger">
                 <template>
                     <b-icon icon="taxi"></b-icon>
-                    <span>{{selectedService ? selectedService.details.name : `Select service`}}</span>
+                    <span>{{selectedService.id ? selectedService.details.name : `Select service`}}</span>
                 </template>
                 <b-icon icon="caret-down"></b-icon>
             </button>
@@ -102,7 +102,7 @@
 
         </b-dropdown>
 
-        <b-button v-if="selectedService" type="is-success" :loading="serversBusy">
+        <b-button v-if="selectedService.id" type="is-success" :loading="serversBusy">
           <b-icon icon="server"></b-icon>
           <!-- <span v-if="selectedServer">{{selectedServer.data ? selectedServer.data.gameserver.query.server_name : `Invalid`}}</span> -->
         </b-button>
@@ -159,7 +159,7 @@
 
           <!-- OPEN -->
           <b-field class="file" style="display:inline-flex;font-size:12px;">
-              <b-upload ref="filesInput" webkitdirectory multiple>
+              <b-upload ref="filesInput" webkitdirectory multiple :disabled="deploying">
                   <a class="button is-primary">
                       <b-icon icon="upload"></b-icon>
                       <span>Open</span>
@@ -172,7 +172,7 @@
 
           <!-- DOWNLOAD -->
           <b-button outlined type="is-link" size="is-small" style="margin-right:5px;" icon-left="random"
-            :disabled="!accountForm.nitradoApiKey"
+            :disabled="!accountForm.nitradoApiKey || deploying"
             >
             Transfer
           </b-button>
@@ -185,7 +185,7 @@
           <!-- SETTINGS SELECTION -->
           <b-dropdown
             class="archaeon-deploy-settings-dropdown"
-            v-model="selectedGameserverSetting" aria-role="list" :disabled="!selectedServer"
+            v-model="selectedGameserverSetting" aria-role="list" :disabled="!selectedServer || deploying"
             >
               <button class="button is-info is-small" type="button" style="margin-right:5px;" slot="trigger" outlined>
                   <template v-if="selectedGameserverSetting.id">
@@ -215,7 +215,7 @@
           <b-button type="is-warning" size="is-small" style="margin-right:5px;" icon-left="sign-out-alt"
             :disabled="!accountForm.nitradoApiKey || !selectedGameserverSetting.id"
             @click="onHardDeploy(selectedService.id)"
-            :loading="hardDeploying"
+            :loading="hardDeploying || deploying"
             >
            Hard Deploy
           </b-button>
@@ -223,12 +223,14 @@
           <!-- DEPLOY -->
           <b-button outlined type="is-warning" size="is-small" style="margin-right:5px;" icon-left="sign-in-alt"
             @click="uploadFilesToGameserver(selectedService.id, ftpuname, files)"
-            :disabled="!accountForm.nitradoApiKey || !selectedGameserverSetting.id">
+            :disabled="!accountForm.nitradoApiKey || !selectedGameserverSetting.id || deploying">
             Soft Deploy
           </b-button>
 
           <!-- COMMIT -->
-          <b-button outlined type="is-success" size="is-small" style="margin-right:5px;" icon-left="gavel" @click="onCommit" :loading="busyCommit">
+          <b-button outlined type="is-success" size="is-small" style="margin-right:5px;" icon-left="gavel" @click="onCommit" :loading="busyCommit"
+            :disabled="deploying"
+            >
             Commit
           </b-button>
 
@@ -313,14 +315,14 @@
             </b-menu>
           </div>
 
-          <!-- XML EDITOR -->
+          <!-- XML EDITORS -->
           <div style="flex-grow:2">
 
-              <div v-if="fileUploadInitialized">
-                <DayzXMLTree :files="selectedFile ? [selectedFile] : []" />
+              <div v-if="fileUploadInitialized && selectedFile">
+                <DayzXMLTree ref="dayz_xml_tree" :files="[selectedFile]" @evolve="xmlTreeDirty = true" :dirty="xmlTreeDirty" :freeze="unsavedChanges" />
               </div>
 
-            <div id="archaeon-xml-editor" style="height:585px;">
+            <div id="archaeon-xml-editor" style="height:585px;border:1px solid 333;">
               
             </div>
           </div>
@@ -378,7 +380,7 @@
           <b-switch v-model="publishServerFeed"
             @input="onPublishServerFeed"
             type="is-success"
-            :disabled="!accountForm.nitradoApiKey || !selectedServer || !serverRegistered"
+            :disabled="!accountForm.nitradoApiKey || !selectedServer || !serverRegistered || !killfeedDiscordChannel"
             :loading="publishServer.busy"
             >
               <span style="color:white;">Publish Server Feed</span>
@@ -388,6 +390,18 @@
           <b-button rounded outlined @click="openPlayerStats = !openPlayerStats" type="is-danger" size="is-small" style="margin-left:25px;">
             <b-icon icon="times"></b-icon>
           </b-button>
+
+          <!-- DISCORD CHANNEL NAME -->
+          <div style="margin:5px;">
+            <b-input placeholder="Discord channel"
+                size="is-small"
+                v-model="killfeedDiscordChannel"
+                type="search"
+                icon="discord"
+                icon-pack="fab"
+                >
+            </b-input>
+          </div>
 
         </div>
 
@@ -499,6 +513,7 @@ import { Client, MessageEmbed, MessageAttachment, RichEmbed } from 'discord.js'
 import html2canvas from 'html2canvas'
 import { Buffer } from 'buffer'
 import DayzXMLTree from '@/components/DayzXMLTree'
+import XmlFormatter from 'xml-formatter'
 
 const getIZurvive = () => new Promise((resolve, reject) => {
     const i = setInterval(() => {
@@ -527,6 +542,9 @@ export default {
   },
   data () {
     return {
+      deploying: false,
+      shouldReinstall: false,
+      xmlTreeDirty: false,
       selectedFile: null,
       fileUploadInitialized: false,
       hardDeploying: false,
@@ -548,6 +566,7 @@ export default {
       },
       serverRegistered: false,
       publishServerFeed: false,
+      killfeedDiscordChannel: null,
       serverLog: ``,
       playerStats: {
         timer: 120,
@@ -572,7 +591,8 @@ export default {
       },
       gameserverSettings: [],
       selectedService: {
-        id: null
+        id: null,
+        schannel: null
       },
       lastRestart: false,
       unsavedChanges: false,
@@ -583,7 +603,6 @@ export default {
       serversBusy: false,
       serversError: false,
       servers: [],
-      selectedService: null,
       servicesBusy: false,
       servicesError: false,
       services: [],
@@ -618,16 +637,29 @@ export default {
     }
   },
   watch: {
+    xmlTreeDirty (newValue, oldValue) {
+      if (newValue !== oldValue) {
+        if (newValue === true) {
+          this.editor.setReadOnly(true)
+          document.getElementById('archaeon-xml-editor').style.border = '1px solid blue'
+          document.getElementById('archaeon-xml-editor').style.opacity = '0.5'
+        } else if (newValue === false) {
+          this.editor.setReadOnly(false)
+          document.getElementById('archaeon-xml-editor').style.border = '1px solid #333'
+          document.getElementById('archaeon-xml-editor').style.opacity = '1'
+        }
+      }
+    },
     serverLog (newValue, oldValue) {
       const terminal = document.getElementById('archaeon-server-logs')
-      console.log(terminal.scrollTop, terminal.scrollHeight)
+      // console.log(terminal.scrollTop, terminal.scrollHeight)
       this.$nextTick(() => {
         terminal.scrollTop = terminal.scrollHeight
       })
     },
     terminalOutput (newValue, oldValue) {
       const terminal = document.getElementById('archaeon-terminal')
-      console.log(terminal.scrollTop, terminal.scrollHeight)
+      // console.log(terminal.scrollTop, terminal.scrollHeight)
       this.$nextTick(() => {
         terminal.scrollTop = terminal.scrollHeight
       })
@@ -652,18 +684,23 @@ export default {
     }
   },
   methods: {
+    onChangeSelectedService (event) {
+      const published = this.isServerPublished(event.id)
+      const registered = this.isServerRegistered(event.id)
+      this.publishServerFeed = published
+      this.serverRegistered = registered
+    },
     isServerRegistered (sid) {
       const isServerRegistered = this.user.servers ? this.user.servers.filter(server => `${server.sid}` === `${sid}`).length > 0 : false
-      if (isServerRegistered) {
-        this.serverRegistered = true
-      }
       return isServerRegistered
     },
     isServerPublished (sid) {
-      const isServerPublished = this.user.servers ? this.user.servers.filter(server => `${server.sid}` === `${sid}`).reduce((a,c) => c.sactive > 0 ? true : false, false) : false
-      if (isServerPublished) {
-        this.publishServerFeed = true
-      }
+      // console.log('sid', sid)
+      const servers = this.user.servers ? this.user.servers : []
+      // console.log('servers', servers)
+      const isServerPublished = servers
+        .filter(server => `${server.sid}` === `${sid}`)
+        .reduce((a,c) => c.sactive > 0 ? true : false, false)
       return isServerPublished
     },
     async onRegisterServer (value) {
@@ -671,7 +708,7 @@ export default {
         this.registerServer.error = null
         this.registerServer.success = false
         this.registerServer.busy = true
-        console.log('using', this.selectedService.id, this.selectedService)
+        // console.log('using', this.selectedService.id, this.selectedService)
         try {
           const body = {
             name: this.selectedService.details.name,
@@ -697,8 +734,10 @@ export default {
           this.publishServer.success = false
           this.publishServer.busy = true
           const sid = this.selectedService.id
+          const schannel = this.killfeedDiscordChannel
           const body = {}
-          const response = await this.$http.put(`http://localhost:8001/api/v2/servers/${sid}/live`, body, {
+          const { details: { portlist_short } } = this.selectedService
+          const response = await this.$http.put(`http://localhost:8001/api/v2/servers/${sid}/${portlist_short}/live/${schannel}`, body, {
             withCredentials: true,
             emulateJSON: true
           })
@@ -1179,7 +1218,8 @@ export default {
           const method = 'GET'
           const sid = this.selectedService.id
           const gameserver = this.selectedServer.data.gameserver
-          const logFile = gameserver.game_specific.log_files.length > 0 ? gameserver.game_specific.log_files[0].replace('dayzxb/','') : ``
+          const { details: { portlist_short } } = this.selectedService
+          const logFile = gameserver.game_specific.log_files.length > 0 ? gameserver.game_specific.log_files[0].replace(`${portlist_short}/`,'') : ``
           const filePath = gameserver.game_specific.path
           if (logFile.length > 0) {
             const file = `${filePath}${logFile}`
@@ -1303,7 +1343,8 @@ export default {
         .filter(x => x.length && (x.length > 0))
         .filter(x => !x.match(/xml/g))
         .reduce((a,c) => `${a}/${c}`, ``)
-      const ftpFilePath = `/games/${ftpuname}/ftproot/dayzxb_missions${appendix}`
+      const { details: { portlist_short } } = this.selectedService
+      const ftpFilePath = `/games/${ftpuname}/ftproot/${portlist_short}_missions${appendix}`
       const ftpFileName = ftpFileNameSplit[ftpFileNameSplit.length - 1]
       const path = `/services/${sid}/gameservers/file_server/upload?path=${ftpFilePath}&file=${ftpFileName}`
       const method = 'POST'
@@ -1362,15 +1403,10 @@ export default {
       })
     },
     async onHardDeploy (sid) {
+      this.deploying = true
       this.hardDeploying = false
-      const method = `POST`
-      const path = `/services/${sid}/gameservers/games/install?game=dayzxb`
-      try {
-        const response = await this.nitradoApiRequest(method, path)
-        this.hardDeploying = true
-      } catch (e) {
-        console.log(e)
-      }
+      this.shouldReinstall = true
+      this.stopGameserver(sid)
     },
     connectToWebSocket (sid, wstoken) {
       return new Promise((resolve, reject) => {
@@ -1412,7 +1448,7 @@ export default {
               const serverState = wsMessage.data
               this.terminalOutput.push(`deploy> gameserver is ${serverState}`)
               if (serverState === 'started') {
-                if (!this.lastRestart) {
+                if (this.lastRestart === false) {
                   this.lastRestart = true
                   this.terminalOutput.push(`deploy> reinstalled`)
                   this.stopGameserver(sid)
@@ -1420,9 +1456,10 @@ export default {
                   this.lastRestart = false
                   this.terminalOutput.push(`deploy> success`)
                   this.hardDeploying = false
+                  this.deploying = false
                 }
               }
-              if ((serverState === 'stopped') && this.lastRestart) {
+              if ((serverState === 'stopped') && this.lastRestart === true) {
                 this.terminalOutput.push(`deploy> restoring settings ${setId}`)
                 await this.restoreGameServerSettings(sid, setId)
                 this.terminalOutput.push(`deploy> uploading xml files to ${ftpuname}`)
@@ -1435,6 +1472,18 @@ export default {
           } else {
             if (wsMessage.type === 'status') {
               this.terminalOutput.push(`status> ${wsMessage.data}`)
+              if (wsMessage.data === 'stopped' && this.shouldReinstall === true) {
+                const method = `POST`
+                const { details: { portlist_short } } = this.selectedService
+                const path = `/services/${sid}/gameservers/games/install?game=${portlist_short}`
+                try {
+                  const response = await this.nitradoApiRequest(method, path)
+                  this.hardDeploying = true
+                  this.shouldReinstall = false
+                } catch (e) {
+                  console.log(e)
+                }
+              }
             }
             if (wsMessage.type === 'query') {
               const keys = Object.keys(wsMessage.data)
@@ -1454,6 +1503,11 @@ export default {
       this.serversBusy = true
       this.terminalOutput = []
       this.selectedService = selectedService
+      const schannel = this.user.servers
+        .filter(server => `${server.sid}` === `${selectedService.id}`)
+        .reduce((a,c) => c.schannel, null)
+      this.selectedService.schannel = schannel
+      this.killfeedDiscordChannel = schannel
       try {
         const options = {
           method: 'GET',
@@ -1520,7 +1574,7 @@ export default {
     },
     async onLoadFile (fileContent, paths) {
       let confirmation = false
-      if (this.unsavedChanges) {
+      if (this.unsavedChanges || this.xmlTreeDirty) {
         confirmation = await new Promise((resolve, reject) => {
           this.$buefy.dialog.confirm({
             message: 'Commit changes before they are lost?',
@@ -1539,8 +1593,9 @@ export default {
         .reduce((a, c) => c, null)
       const content = files
         .reduce((a, c) => c.contents, ``)
-      this.editor.session.setValue(content)
+      this.editor.session.setValue(XmlFormatter(content))
       this.unsavedChanges = false
+      this.xmlTreeDirty = false
     },
     onDrawAll (fileContent, paths) {
       console.log(fileContent, paths)
@@ -1592,7 +1647,7 @@ export default {
       const container = document.getElementsByClassName('sidebar-content')[0]
       const resizeObserver = new ResizeObserver(entries => {
         const height = entries[0].contentRect.height
-        document.getElementById('archaeon-xml-editor').style.height = `${height - 50}px`
+        document.getElementById('archaeon-xml-editor').style.height = `${height - 365}px`
         document.getElementsByClassName('archaeon-file-menu')[0].style.height = `${height - 50}px`
       })
       resizeObserver.observe(container)
@@ -1603,7 +1658,16 @@ export default {
     },
     onCommit () {
       this.busyCommit = true
-      const newContents = this.editor.getValue()
+      const serializer = new XMLSerializer()
+      const xmlTreeContents = this.$refs.dayz_xml_tree.branches.reduce((a, c) => serializer.serializeToString(c.xmlDoc), null)
+      const xmlRawContents = this.editor.getValue()
+      const newContents = this.xmlTreeDirty ? xmlTreeContents : xmlRawContents
+      if (this.xmlTreeDirty) {
+        this.editor.session.setValue(XmlFormatter(newContents))
+      }
+      if (this.unsavedChanges) {
+        this.$refs.dayz_xml_tree.branches = this.$refs.dayz_xml_tree.branches.map(b => ({ ...b, contents: newContents }))
+      }
       this.files = [
         ...this.files.filter(file => file.path !== this.loadedFile.path),
         ...this.files.filter(file => file.path === this.loadedFile.path)
@@ -1618,13 +1682,19 @@ export default {
       ]
       this.busyCommit = false
       this.unsavedChanges = false
+      this.xmlTreeDirty = false
+      this.$forceUpdate()
     },
     initXmlEditor () {
       this.editor = ace.edit('archaeon-xml-editor')
       this.editor.setTheme('ace/theme/pastel_on_dark')
       this.editor.session.setMode('ace/mode/xml')
       this.editor.session.on('change', (delta) => {
+        console.log(delta)
+        // HERE
+        // if ((delta.end.row + 1) === delta.lines.length)
         this.unsavedChanges = true
+        document.getElementById('archaeon-xml-editor').style.border = '1px solid orange'
       })
     },
     onRegistered (user) {

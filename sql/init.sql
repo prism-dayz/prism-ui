@@ -41,6 +41,8 @@ create table servers (
   sborn date not null default now(),
   sdchannel varchar(64) default null,
   sactive integer not null default 0,
+  schannel varchar(64) default null,
+  sportlist varchar(16) default null,
   sloglastsize integer not null default 0,
   sloglastftppath varchar default null,
   uid integer not null,
