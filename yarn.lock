@@ -5398,6 +5398,11 @@ node-releases@^1.1.53:
   resolved "https://registry.yarnpkg.com/node-releases/-/node-releases-1.1.55.tgz#8af23b7c561d8e2e6e36a46637bab84633b07cee"
   integrity sha512-H3R3YR/8TjT5WPin/wOoHOUPHgvj8leuU/Keta/rwelEQN9pA/S2Dx8/se4pZ2LBxSd0nAGzsNzhqwa77v7F1w==
 
+nodemailer@^6.4.13:
+  version "6.4.13"
+  resolved "https://registry.yarnpkg.com/nodemailer/-/nodemailer-6.4.13.tgz#40e67cf5a32f2052258822a9394e190ea9714801"
+  integrity sha512-XmtiiKza2Cqtr+ZRMchMZn9s2nmwQDeakbf+yL0ODsIXOv58UZgk/MKPOkDKqY+mvxHs87PrJK7Nf/tcpKHqYQ==
+
 nopt@^4.0.1:
   version "4.0.3"
   resolved "https://registry.yarnpkg.com/nopt/-/nopt-4.0.3.tgz#a375cad9d02fd921278d954c2254d5aa57e15e48"
@@ -8475,6 +8480,18 @@ ws@^7.2.1, ws@^7.2.5:
   version "7.2.5"
   resolved "https://registry.yarnpkg.com/ws/-/ws-7.2.5.tgz#abb1370d4626a5a9cd79d8de404aa18b3465d10d"
   integrity sha512-C34cIU4+DB2vMyAbmEKossWq2ZQDr6QEyuuCzWrM9zfw1sGc0mYiJ0UnG9zzNykt49C2Fi34hvr2vssFQRS6EA==
+
+xml-formatter@^2.1.3:
+  version "2.3.0"
+  resolved "https://registry.yarnpkg.com/xml-formatter/-/xml-formatter-2.3.0.tgz#99c2c33fb6c63691763e8aeb5ddf7205a9df7f16"
+  integrity sha512-ZYG7vIHn0Y3vSa4QGJX7jv0WrwFqGQJC+Wgoir+7c+XCHa4KWeBfc1+Q7NJVQNMK9/DGgl1/UxhzvDm3J8Xjmg==
+  dependencies:
+    xml-parser-xo "^3.1.0"
+
+xml-parser-xo@^3.1.0:
+  version "3.1.0"
+  resolved "https://registry.yarnpkg.com/xml-parser-xo/-/xml-parser-xo-3.1.0.tgz#a3a138f0525d7d1e717928ae0d87c03691b0eaa2"
+  integrity sha512-7oz5N2NVnzKTSrYPFQ9zuEEqielMUgoTakaxFA2z2bWEkIlsZsnr7GxVtuElbdeNIZBQmDW1kktuAkjJjLXEZg==
 
 xtend@^4.0.0, xtend@~4.0.1:
   version "4.0.2"

@@ -13,6 +13,8 @@ const { Strategy: RememberMeStrategy } = require('passport-remember-me')
 const PostgreSqlStore = require('connect-pg-simple')(session)
 const { version } = require('../package.json')
 const discord = require('discord.js')
+const crypto = require('crypto')
+const nodemailer = require('nodemailer')
 const {
   randomString,
   doNitradoFileServerApiProper,
@@ -38,6 +40,33 @@ const authorized = () => {
     }
   }
 }
+
+const getEmailText = (username, email, password, key) => {
+  return `Hello, ${username}.
+
+Here is your account information:
+
+  Username: ${username}
+  E-mail: ${email}
+  Password: ${password}
+
+Use the following link to confirm your e-mail, and begin using the platform.
+
+  https://localhost:8080/confirm-email/${key}
+
+Good luck.
+
+You're recieving this e-mail because somebody signed up for archaeon, a platform for dayz nitrado public slot server modding.`
+}
+
+// instantiate mail
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: 'archaeonplatform@gmail.com',
+    pass: '!Kaolaubuntu32'
+  }
+})
 
 // instantiate web server
 const storage = multer.memoryStorage()
@@ -192,9 +221,9 @@ const parseServerLog = async (sid, user, serverLog, ftpPath, /** actually newest
       }).reduce((a,b) => b, ``)
       // console.log(type)
 
-      match = line.match(/\|\sPlayer\s\"[a0-z9\s\/]*\"/g)
+      match = line.match(/\|\sPlayer\s\"[a0-z9\s\/\-]*\"/g)
       const player = match ? match[0].split('"')[1] : 'ParseWarning'
-      match = line.match(/by\sPlayer\s\"[a0-z9\s\/]*\"/g)
+      match = line.match(/by\sPlayer\s\"[a0-z9\s\/\-]*\"/g)
       const byPlayer = type === 'hit by Infected' ? 'Infected' : (match ? match[0].split('"')[1] : 'ParseWarning')
       match = null
 
@@ -277,7 +306,7 @@ const parseServerLog = async (sid, user, serverLog, ftpPath, /** actually newest
 
 
             try {
-              const pid = line.match(/(id=[A-Z0-9]*)/g)[0].split('id=')[1]
+              const pid = line.match(/(id=[a-zA-Z0-9_-]*)/g)[0].split('id=')[1]
               const pname = player
               const psquery = `update playersservers set psstatus = 1 where pid = $1 and sid = $2 returning *`
               const psparameters = [pid, sid]
@@ -305,7 +334,7 @@ const parseServerLog = async (sid, user, serverLog, ftpPath, /** actually newest
 
 
             try {
-              const pid = line.match(/(id=[A-Z0-9]*)/g)[1].split('id=')[1]
+              const pid = line.match(/(id=[a-zA-Z0-9_-]*)/g)[1].split('id=')[1]
               const psquery = `
                 update playersservers
                 set psdamage = (psdamage + ($3 * 1.0000)),
@@ -332,7 +361,7 @@ const parseServerLog = async (sid, user, serverLog, ftpPath, /** actually newest
 
 
             try {
-              const pid = line.match(/(id=[A-Z0-9]*)/g)[1].split('id=')[1]
+              const pid = line.match(/(id=[a-zA-Z0-9_-]*)/g)[1].split('id=')[1]
               const psquery = `
                 update playersservers
                 set pskills = pskills + 1,
@@ -342,7 +371,7 @@ const parseServerLog = async (sid, user, serverLog, ftpPath, /** actually newest
               `
               const psparameters = [pid, sid, fromMeters]
               const psresult = await db.query(psquery, psparameters)
-              const pid1 = line.match(/(id=[A-Z0-9]*)/g)[0].split('id=')[1]
+              const pid1 = line.match(/(id=[a-zA-Z0-9_-]*)/g)[0].split('id=')[1]
               const psquery1 = `
                 update playersservers
                 set psdeaths = psdeaths + 1,
@@ -352,13 +381,15 @@ const parseServerLog = async (sid, user, serverLog, ftpPath, /** actually newest
               const psparameters1 = [pid1, sid]
               const psresult1 = await db.query(psquery1, psparameters1)
 
+              console.log('should kill feed?', shouldKillfeed)
+
               if (shouldKillfeed) {
                 // killfeed
-                const experimental = client.channels.cache.find(channel => channel.name === schannel)
+                const experimental = client.channels.cache.find(channel => `${channel.id}` === `${schannel}`)
                 let feed = `__${byPlayer}__ killed _${player}_ with ${weapon}`
                 feed = ((fromMeters === `0`) || (fromMeters === `0.0`) || (fromMeters === 0) || (fromMeters === 0.0)) ? feed : `${feed} from ${fromMeters} meters`
                 feed = `${feed}.`
-                console.log(feed)
+                console.log('feed', feed)
                 experimental.send(feed)
               }
 
@@ -374,7 +405,7 @@ const parseServerLog = async (sid, user, serverLog, ftpPath, /** actually newest
 
 
             try {
-              const pid = line.match(/(id=[A-Z0-9]*)/g)[0].split('id=')[1]
+              const pid = line.match(/(id=[a-zA-Z0-9_-]*)/g)[0].split('id=')[1]
               const psquery = `update playersservers set psstatus = 0 where pid = $1 and sid = $2 returning *`
               const psparameters = [pid, sid]
               const psresult = await db.query(psquery, psparameters)
@@ -572,6 +603,7 @@ client.once('ready', async () => {
   // client.guilds.cache.find(guild => console.log(guild))
   // const experimental = client.channels.cache.find(channel => channel.name === 'experimental')
   // experimental.send('i have been summoned')
+  // HERE
   const onlineServers = await db.query(`
     select s.sid, convert_from(decrypt(u.nakey::bytea, 'secret-key', 'bf'), 'utf-8') as nakey from servers s, users u where s.sactive = 1 and s.uid = u.uid
   `, [])
@@ -590,7 +622,7 @@ client.once('ready', async () => {
 })
 
 client.on('message', async message => {
-  console.log(`bot recieved message`, message.content)
+  console.log(`bot recieved message`, message.channel.id, message.content, message.guild)
   if (message.content.substring(0,5) === 'claim') {
     const pid = message.content.substring(6,message.content.length)
     const pdid = message.author.id
@@ -647,14 +679,15 @@ client.on('message', async message => {
             row_number() over(order by (ps.psheadshots + ps.psbrainshots + ps.pskd + (ps.psmeters * 0.005) + (ps.psdamage * 0.005) + ps.pskills - ps.psdeaths) desc) as rankk
           from
             playersservers ps,
-            players p
+            players p,
+            servers s
           where
-            ps.pid = p.pid and ps.psstatus = 1
+            ps.pid = p.pid and ps.psstatus = 1 and ps.sid = s.sid and s.schannel = $1
           group by
             p.pname, ps.pskills, ps.psdeaths, ps.pskd, ps.psdamage, ps.psmeters, ps.psheadshots, ps.psbrainshots, ps.psstatus
           order by (ps.psheadshots + ps.psbrainshots + ps.pskd + (ps.psmeters * 0.005) + (ps.psdamage * 0.005) + ps.pskills - ps.psdeaths) desc
         `
-        const rankQuery = await db.query(query, [])
+        const rankQuery = await db.query(query, [message.channel.id])
 
         if (rankQuery.rows.length > 0) {
           const canvas = createCanvas(915, (rankQuery.rows.length + 3) * 12)
@@ -762,8 +795,8 @@ client.on('message', async message => {
           message.channel.send('There does not appear to be anyone online.')
         }
       } else {
-        const query = `select p.pname from playersservers ps, players p where ps.pid = p.pid and ps.psstatus = 1;`
-        const rankQuery = await db.query(query, [])
+        const query = `select p.pname from playersservers ps, players p, servers s where ps.pid = p.pid and ps.psstatus = 1 and ps.sid = s.sid and s.schannel = $1;`
+        const rankQuery = await db.query(query, [message.channel.id])
         if (rankQuery.rows.length > 0) {
           console.log('>>>>>>>', rankQuery.rows)
           const survivors = rankQuery.rows
@@ -783,7 +816,7 @@ client.on('message', async message => {
         const targetPlayerName = message.content.substring(17,message.content.length)
         const rankQuery = await db.query(`
           select
-            r.*, (select count(*) from playersservers) as of
+            r.*, (select count(*) from playersservers ps, servers s where ps.sid = s.sid and s.schannel = $2) as of
           from (
             select
               ps.pskd,
@@ -791,9 +824,10 @@ client.on('message', async message => {
               row_number() over(order by ps.pskd desc) as rankk
             from
               playersservers ps,
-              players p
+              players p,
+              servers s
             where
-              ps.pid = p.pid
+              ps.pid = p.pid and ps.sid = s.sid and s.schannel = $2
             group by
               ps.pskd,
               p.pname
@@ -801,7 +835,7 @@ client.on('message', async message => {
           ) r
           where
             r.pname = $1
-        `, [targetPlayerName])
+        `, [targetPlayerName, message.channel.id])
         console.log('rankQuery', rankQuery, rankQuery.rows)
         const rank = rankQuery.rows
           .reduce((a,c,i) => `Survivor _${c.pname}_ ranked ${c.rankk}/${c.of} with a ${c.pskd} k/d ratio.`, `Survivor _${targetPlayerName}_ not ranked.`)
@@ -814,7 +848,7 @@ client.on('message', async message => {
         const targetPlayerName = message.content.substring(20,message.content.length)
         const rankQuery = await db.query(`
           select
-            r.*, (select count(*) from playersservers) as of
+            r.*, (select count(*) from playersservers ps, servers s where ps.sid = s.sid and s.schannel = $2) as of
           from (
             select
               ps.pskills,
@@ -822,9 +856,10 @@ client.on('message', async message => {
               row_number() over(order by ps.pskills desc) as rankk
             from
               playersservers ps,
-              players p
+              players p,
+              servers s
             where
-              ps.pid = p.pid
+              ps.pid = p.pid and ps.sid = s.sid and s.schannel = $2
             group by
               ps.pskills,
               p.pname
@@ -832,7 +867,7 @@ client.on('message', async message => {
           ) r
           where
             r.pname = $1
-        `, [targetPlayerName])
+        `, [targetPlayerName, message.channel.id])
         console.log('rankQuery', rankQuery, rankQuery.rows)
         const rank = rankQuery.rows
           .reduce((a,c,i) => `Survivor _${c.pname}_ ranked ${c.rankk}/${c.of} with ${c.pskills} kills.`, `Survivor _${targetPlayerName}_ not ranked.`)
@@ -845,7 +880,7 @@ client.on('message', async message => {
         const targetPlayerName = message.content.substring(21,message.content.length)
         const rankQuery = await db.query(`
           select
-            r.*, (select count(*) from playersservers) as of
+            r.*, (select count(*) from playersservers ps, servers s where ps.sid = s.sid and s.schannel = $2) as of
           from (
             select
               ps.psdeaths,
@@ -853,9 +888,10 @@ client.on('message', async message => {
               row_number() over(order by ps.psdeaths desc) as rankk
             from
               playersservers ps,
-              players p
+              players p,
+              servers s
             where
-              ps.pid = p.pid
+              ps.pid = p.pid and ps.sid = s.sid and s.schannel = $2
             group by
               ps.psdeaths,
               p.pname
@@ -863,7 +899,7 @@ client.on('message', async message => {
           ) r
           where
             r.pname = $1
-        `, [targetPlayerName])
+        `, [targetPlayerName, message.channel.id])
         console.log('rankQuery', rankQuery, rankQuery.rows)
         const rank = rankQuery.rows
           .reduce((a,c,i) => `Survivor _${c.pname}_ ranked ${c.rankk}/${c.of} with ${c.psdeaths} deaths.`, `Survivor _${targetPlayerName}_ not ranked.`)
@@ -876,7 +912,7 @@ client.on('message', async message => {
         const targetPlayerName = message.content.substring(21,message.content.length)
         const rankQuery = await db.query(`
           select
-            r.*, (select count(*) from playersservers) as of
+            r.*, (select count(*) from playersservers ps, servers s where ps.sid = s.sid and s.schannel = $2) as of
           from (
             select
               ps.psdamage,
@@ -884,9 +920,10 @@ client.on('message', async message => {
               row_number() over(order by ps.psdamage desc) as rankk
             from
               playersservers ps,
-              players p
+              players p,
+              servers s
             where
-              ps.pid = p.pid
+              ps.pid = p.pid and ps.sid = s.sid and s.schannel = $2
             group by
               ps.psdamage,
               p.pname
@@ -894,7 +931,7 @@ client.on('message', async message => {
           ) r
           where
             r.pname = $1
-        `, [targetPlayerName])
+        `, [targetPlayerName, message.channel.id])
         console.log('rankQuery', rankQuery, rankQuery.rows)
         const rank = rankQuery.rows
           .reduce((a,c,i) => `Survivor _${c.pname}_ ranked ${c.rankk}/${c.of} dealing ${c.psdamage} damage.`, `Survivor _${targetPlayerName}_ not ranked.`)
@@ -907,7 +944,7 @@ client.on('message', async message => {
         const targetPlayerName = message.content.substring(21,message.content.length)
         const rankQuery = await db.query(`
           select
-            r.*, (select count(*) from playersservers) as of
+            r.*, (select count(*) from playersservers ps, servers s where ps.sid = s.sid and s.schannel = $2) as of
           from (
             select
               ps.psmeters,
@@ -915,9 +952,10 @@ client.on('message', async message => {
               row_number() over(order by ps.psmeters desc) as rankk
             from
               playersservers ps,
-              players p
+              players p,
+              servers s
             where
-              ps.pid = p.pid
+              ps.pid = p.pid and ps.sid = s.sid and s.schannel = $2
             group by
               ps.psmeters,
               p.pname
@@ -925,7 +963,7 @@ client.on('message', async message => {
           ) r
           where
             r.pname = $1
-        `, [targetPlayerName])
+        `, [targetPlayerName, message.channel.id])
         console.log('rankQuery', rankQuery, rankQuery.rows)
         const rank = rankQuery.rows
           .reduce((a,c,i) => `Survivor _${c.pname}_ ranked ${c.rankk}/${c.of} with their longest shot from ${c.psmeters} meters.`, `Survivor _${targetPlayerName}_ not ranked.`)
@@ -938,7 +976,7 @@ client.on('message', async message => {
         const targetPlayerName = message.content.substring(24,message.content.length)
         const rankQuery = await db.query(`
           select
-            r.*, (select count(*) from playersservers) as of
+            r.*, (select count(*) from playersservers ps, servers s where ps.sid = s.sid and s.schannel = $2) as of
           from (
             select
               ps.psheadshots,
@@ -946,9 +984,10 @@ client.on('message', async message => {
               row_number() over(order by ps.psheadshots desc) as rankk
             from
               playersservers ps,
-              players p
+              players p,
+              servers s
             where
-              ps.pid = p.pid
+              ps.pid = p.pid and ps.sid = s.sid and s.schannel = $2
             group by
               ps.psheadshots,
               p.pname
@@ -956,7 +995,7 @@ client.on('message', async message => {
           ) r
           where
             r.pname = $1
-        `, [targetPlayerName])
+        `, [targetPlayerName, message.channel.id])
         console.log('rankQuery', rankQuery, rankQuery.rows)
         const rank = rankQuery.rows
           .reduce((a,c,i) => `Survivor _${c.pname}_ ranked ${c.rankk}/${c.of} with ${c.psheadshots} headshots.`, `Survivor _${targetPlayerName}_ not ranked.`)
@@ -969,7 +1008,7 @@ client.on('message', async message => {
         const targetPlayerName = message.content.substring(25,message.content.length)
         const rankQuery = await db.query(`
           select
-            r.*, (select count(*) from playersservers) as of
+            r.*, (select count(*) from playersservers ps, servers s where ps.sid = s.sid and s.schannel = $2) as of
           from (
             select
               ps.psbrainshots,
@@ -977,9 +1016,10 @@ client.on('message', async message => {
               row_number() over(order by ps.psbrainshots desc) as rankk
             from
               playersservers ps,
-              players p
+              players p,
+              servers s
             where
-              ps.pid = p.pid
+              ps.pid = p.pid and ps.sid = s.sid and s.schannel = $2
             group by
               ps.psbrainshots,
               p.pname
@@ -987,7 +1027,7 @@ client.on('message', async message => {
           ) r
           where
             r.pname = $1
-        `, [targetPlayerName])
+        `, [targetPlayerName, message.channel.id])
         console.log('rankQuery', rankQuery, rankQuery.rows)
         const rank = rankQuery.rows
           .reduce((a,c,i) => `Survivor _${c.pname}_ ranked ${c.rankk}/${c.of} with ${c.psbrainshots} brainshots.`, `Survivor _${targetPlayerName}_ not ranked.`)
@@ -1004,17 +1044,18 @@ client.on('message', async message => {
               p.pname, ps.pskills, ps.psdeaths, ps.pskd, ps.psdamage, ps.psmeters, ps.psheadshots, ps.psbrainshots, ps.psstatus,
               (ps.psheadshots + ps.psbrainshots + ps.pskd + (ps.psmeters * 0.005) + (ps.psdamage * 0.005) + ps.pskills - ps.psdeaths) as score,
               row_number() over(order by (ps.psheadshots + ps.psbrainshots + ps.pskd + (ps.psmeters * 0.005) + (ps.psdamage * 0.005) + ps.pskills - ps.psdeaths) desc) as rankk,
-              (select count(*) from playersservers) as of
+              (select count(*) from playersservers ps, servers s where ps.sid = s.sid and s.schannel = $2) as of
             from
               playersservers ps,
-              players p
+              players p,
+              servers s
             where
-              ps.pid = p.pid
+              ps.pid = p.pid and ps.sid = s.sid and s.schannel = $2
             group by
               p.pname, ps.pskills, ps.psdeaths, ps.pskd, ps.psdamage, ps.psmeters, ps.psheadshots, ps.psbrainshots, ps.psstatus
             order by (ps.psheadshots + ps.psbrainshots + ps.pskd + (ps.psmeters * 0.005) + (ps.psdamage * 0.005) + ps.pskills - ps.psdeaths) desc
           ) as leaderboard where leaderboard.pname = $1
-        `, [targetPlayerName])
+        `, [targetPlayerName, message.channel.id])
         const placementString = rankQuery.rows
           .reduce((a,c,i) => `Survivor _${c.pname}_ ranked ${c.rankk}/${c.of} with ${c.pskills} kills, ${c.psdeaths} deaths, for a ${c.pskd} k/d, dealing ${c.psdamage} damage, with their longest kill shot from ${c.psmeters} meters, as well as ${c.psheadshots} headshots, and ${c.psbrainshots} brainshots for an overall score of ${c.score} points.`, `Survivor _${targetPlayerName}_ not ranked.`)
         if (placementString.length > 1) {
@@ -1069,17 +1110,18 @@ client.on('message', async message => {
             p.pname, ps.pskills, ps.psdeaths, ps.pskd, ps.psdamage, ps.psmeters, ps.psheadshots, ps.psbrainshots, ps.psstatus,
             (ps.psheadshots + ps.psbrainshots + ps.pskd + (ps.psmeters * 0.005) + (ps.psdamage * 0.005) + ps.pskills - ps.psdeaths) as score,
             row_number() over(order by ps.pskd desc) as rankk,
-            (select count(*) from playersservers) as of
+            (select count(*) from playersservers ps, servers s where ps.sid = s.sid and s.schannel = $1) as of
           from
             playersservers ps,
-            players p
+            players p,
+            servers s
           where
-            ps.pid = p.pid
+            ps.pid = p.pid and ps.sid = s.sid and s.schannel = $1
           group by
             p.pname, ps.pskills, ps.psdeaths, ps.pskd, ps.psdamage, ps.psmeters, ps.psheadshots, ps.psbrainshots, ps.psstatus
           order by ps.pskd desc
           limit 50
-        `, [])
+        `, [message.channel.id])
 
         if (rankQuery.rows.length > 0) {
           const canvas = createCanvas(915, 640)
@@ -1194,17 +1236,18 @@ client.on('message', async message => {
             p.pname, ps.pskills, ps.psdeaths, ps.pskd, ps.psdamage, ps.psmeters, ps.psheadshots, ps.psbrainshots, ps.psstatus,
             (ps.psheadshots + ps.psbrainshots + ps.pskd + (ps.psmeters * 0.005) + (ps.psdamage * 0.005) + ps.pskills - ps.psdeaths) as score,
             row_number() over(order by ps.psmeters desc) as rankk,
-            (select count(*) from playersservers) as of
+            (select count(*) from playersservers ps, servers s where ps.sid = s.sid and s.schannel = $1) as of
           from
             playersservers ps,
-            players p
+            players p,
+            servers s
           where
-            ps.pid = p.pid
+            ps.pid = p.pid and ps.sid = s.sid and s.schannel = $1
           group by
             p.pname, ps.pskills, ps.psdeaths, ps.pskd, ps.psdamage, ps.psmeters, ps.psheadshots, ps.psbrainshots, ps.psstatus
           order by ps.psmeters desc
           limit 50
-        `, [])
+        `, [message.channel.id])
 
         if (rankQuery.rows.length > 0) {
           const canvas = createCanvas(915, 640)
@@ -1319,17 +1362,18 @@ client.on('message', async message => {
             p.pname, ps.pskills, ps.psdeaths, ps.pskd, ps.psdamage, ps.psmeters, ps.psheadshots, ps.psbrainshots, ps.psstatus,
             (ps.psheadshots + ps.psbrainshots + ps.pskd + (ps.psmeters * 0.005) + (ps.psdamage * 0.005) + ps.pskills - ps.psdeaths) as score,
             row_number() over(order by (ps.psheadshots + ps.psbrainshots + ps.pskd + (ps.psmeters * 0.005) + (ps.psdamage * 0.005) + ps.pskills - ps.psdeaths) desc) as rankk,
-            (select count(*) from playersservers) as of
+            (select count(*) from playersservers ps, servers s where ps.sid = s.sid and s.schannel = $1) as of
           from
             playersservers ps,
-            players p
+            players p,
+            servers s
           where
-            ps.pid = p.pid
+            ps.pid = p.pid and ps.sid = s.sid and s.schannel = $1
           group by
             p.pname, ps.pskills, ps.psdeaths, ps.pskd, ps.psdamage, ps.psmeters, ps.psheadshots, ps.psbrainshots, ps.psstatus
           order by (ps.psheadshots + ps.psbrainshots + ps.pskd + (ps.psmeters * 0.005) + (ps.psdamage * 0.005) + ps.pskills - ps.psdeaths) desc
           limit 50
-        `, [])
+        `, [message.channel.id])
 
         if (rankQuery.rows.length > 0) {
           const canvas = createCanvas(915, 640)
@@ -1443,7 +1487,7 @@ client.on('message', async message => {
   }
 })
 
-client.login(`Njk5MDMxMTM4ODAyNTk3OTE4.XpOdeg.k0DOV7ZTMqjwK0mmrm1211ZKYa4`)
+client.login(`Njk5MDMxMTM4ODAyNTk3OTE4.XpOdeg.xLNUSlSBr8AqI8lyZCmh_mhx4lY`)
 
 const bailbondsClient = new DiscordClient()
 
@@ -1606,7 +1650,7 @@ const localStrategyHandler = async (username, password, callback) => {
   // there are three variations of ways to call callback() based on db query
   // insert into users (uname, upassword) values ('rainbows@clouds.io', crypt('sugarcane', gen_salt('bf')))
   try {
-    const query = 'select uid, uname, uborn from users where uname = $1 and upassword = crypt($2, upassword)'
+    const query = 'select uid, uname, uborn, uconfirmed from users where uname = $1 and upassword = crypt($2, upassword)'
     const params = [username, password]
     const result = await db.query(query, params)
     //console.log('localStrategyHandler', result)
@@ -1676,7 +1720,8 @@ passport.deserializeUser(async (id, done) => {
     select uid, uname, uborn,
       convert_from(decrypt(nakey::bytea, 'secret-key', 'bf'), 'utf-8') as nakey,
       convert_from(decrypt(dakey::bytea, 'secret-key', 'bf'), 'utf-8') as dakey, 
-      uemail
+      uemail,
+      uconfirmed
     from users where uid = $1
     `
   const params = [id]
@@ -1746,8 +1791,15 @@ app.post('/api/v2/authenticate', db.connected(), passport.authenticate('local'),
 }, async (req, res) => {
   console.log('auth', req.user)
   const { user } = req
-  const { uname } = user
-  res.redirect(`/api/v2/users/${uname}`)
+  const { uname, uconfirmed } = user
+  console.log('uconfirmed', uconfirmed)
+  if (`${uconfirmed}` === `${1}`) {
+    res.redirect(`/api/v2/users/${uname}`)
+  } else {
+    res.status(400)
+    res.send({ uconfirmed: uconfirmed })
+    res.end()
+  }
 })
 
 app.get('/api/v2/unauthenticate', (req, res) => {
@@ -1915,16 +1967,29 @@ app.post('/api/v2/register', db.connected(), upload.none(), async (req, res) => 
         reject(result)
       }
     })
+    const key = await new Promise((resolve, reject) => {
+      const key = crypto.randomBytes(48, (error, buffer) => {
+        const key = buffer.toString('hex')
+        resolve(key)
+      })
+    })
     // will error if exists, else continue and insert
     const result = await new Promise(async (resolve, reject) => {
       try {
         const query = `
-          insert into users (uname, uemail, upassword, nakey, dakey)
-          values ($1, $2, crypt($3, gen_salt('bf')), encrypt(bytea '', 'secret-key', 'bf'), encrypt(bytea '', 'secret-key', 'bf'))
+          insert into users (uname, uemail, upassword, uconfirmkey, nakey, dakey)
+          values (
+            $1,
+            $2,
+            crypt($3, gen_salt('bf')),
+            $4,
+            encrypt(bytea '', 'secret-key', 'bf'),
+            encrypt(bytea '', 'secret-key', 'bf')
+          )
           returning uname, uborn
         `
         console.log('insert into user', username, email, password)
-        const parameters = [username, email, password]
+        const parameters = [username, email, password, key]
         const result = await db.query(query, parameters)
         console.log('result', result.rows.length)
         if (result.rows.length > 0) {
@@ -1939,6 +2004,49 @@ app.post('/api/v2/register', db.connected(), upload.none(), async (req, res) => 
     res.status(201)
     res.send(result.rows)
     res.end()
+    const mailOptions = {
+      from: 'Archaeon Platform <no-reply@archaeon.io>',
+      to: 'braungoodson@gmail.com', // email
+      priority: 'high',
+      subject: 'Welcome to Archaeon. Confirm your e-mail within.',
+      text: getEmailText(username, email, password, key)
+    }
+    transporter.sendMail(mailOptions, (error, info) => {
+      if (error) {
+        console.log(error)
+      } else {
+        console.log(info)
+      }
+    })
+  } catch (error) {
+    console.log(error)
+    res.status(401)
+    res.send(error)
+    res.end()
+  }
+})
+
+app.post('/api/v2/confirm-email/:key', db.connected(), async (req, res) => {
+  const { params } = req
+  const { key } = params
+  try {
+    const query = `
+      update users set uconfirmkey = null, uconfirmed = 1
+      where uconfirmkey = $1
+      returning uname, uborn
+    `
+    const parameters = [key]
+    const result = await db.query(query, parameters)
+    if (result.rows.length > 0) {
+      res.status(201)
+      res.send(result.rows)
+      res.end()
+    } else {
+      console.log(result)
+      res.status(500)
+      res.send()
+      res.end()
+    }
   } catch (error) {
     console.log(error)
     res.status(401)

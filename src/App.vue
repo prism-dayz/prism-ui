@@ -895,6 +895,10 @@ export default {
                 switchedCoords: false
               })
 
+              const icon = L.divIcon({
+                className: `animated-player-position player-position-${(Math.random() * 2000).toFixed()}`
+              })
+
               playerPositionsHash[pc.player] = L
                 .circle([latlng.lat, latlng.lng], options)
 
@@ -1743,6 +1747,26 @@ export default {
 </script>
 
 <style>
+
+.animated-player-position {
+  border-radius: 50%;
+  border: 1px solid blue;
+  background-color: aqua;
+  height: 350px;
+  width: 350px;
+  opacity: 1;
+}
+
+@keyframes scaleIn {
+  from {
+    transform: scale(.5, .5);
+    opacity: .5;
+  }
+  to {
+    transform: scale(2.5, 2.5);
+    opacity: 0;
+  }
+}
 
 .spin {
   /* border: 1px solid red; */

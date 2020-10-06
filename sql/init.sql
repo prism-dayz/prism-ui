@@ -4,6 +4,8 @@ create table users (
   uemail varchar(50) unique not null,
   upassword varchar(60) not null,
   uborn date not null default now(),
+  uconfirmed integer default 0,
+  uconfirmkey varchar(128) default null,
   nakey varchar(256) not null,
   dakey varchar(256) not null
 );

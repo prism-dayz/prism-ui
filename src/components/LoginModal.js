@@ -2,6 +2,7 @@ const LoginModal = {
   props: ['header', 'uname'],
   data () {
       return {
+          uconfirmed: null,
           rememberMe: false,
           username: null,
           password: null,
@@ -34,6 +35,7 @@ const LoginModal = {
           this.busy = true
           this.error = false
           this.success = false
+          this.uconfirmed = null
           try {
               const body = {
                   remember_me: rememberMe,
@@ -57,6 +59,9 @@ const LoginModal = {
               this.ok = false
               this.error = true
               this.busy = false
+              if (error.body && error.body.uconfirmed === 0) {
+                  this.uconfirmed = 0
+              }
               setTimeout(() => {
                   this.ok = true
               }, 1500)
@@ -91,6 +96,9 @@ const LoginModal = {
                     </b-input>
                 </b-field>
 
+                <b-message v-if="uconfirmed === 0" type="is-warning" has-icon>
+                    Looks like you haven't confirmed your e-mail address yet. Click here to resend confirmation e-mail.
+                </b-message>
             </section>
             <footer class="modal-card-foot">
                 <button class="button" type="button" @click="$parent.close()">Close</button>
