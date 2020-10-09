@@ -24,6 +24,11 @@ Vue.use(VueRouter)
     component: () => import(/* webpackChunkName: "login" */ '../views/Login.vue')
   },
   {
+    path: '/confirm-email/:token',
+    name: 'ConfirmEmail',
+    component: () => import(/* webpackChunkName: "confirmEmail" */ '../views/ConfirmEmail.vue')
+  },
+  {
     path: '/register',
     name: 'Register',
     component: () => import(/* webpackChunkName: "register" */ '../views/Register.vue')

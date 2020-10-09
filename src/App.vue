@@ -496,6 +496,8 @@
 
       </div>
     </b-sidebar>
+
+    <router-view></router-view>
     
   </div>
 </template>
@@ -514,6 +516,7 @@ import html2canvas from 'html2canvas'
 import { Buffer } from 'buffer'
 import DayzXMLTree from '@/components/DayzXMLTree'
 import XmlFormatter from 'xml-formatter'
+import moment from 'moment'
 
 const getIZurvive = () => new Promise((resolve, reject) => {
     const i = setInterval(() => {
@@ -786,6 +789,8 @@ export default {
             'hit by FallDamage',
             'killed by Player',
             '##### PlayerList',
+            'built',
+            'placed',
             '\>\\)$'
           ]
 
@@ -798,17 +803,18 @@ export default {
           }).reduce((a,b) => b, ``)
           // console.log(type)
 
-          match = line.match(/\|\sPlayer\s\"[a0-z9\s\/]*\"/g)
+          match = line.match(/\|\sPlayer\s\"[a0-z9\s\/-]*\"/g)
           const player = match ? match[0].split('"')[1] : 'ParseWarning'
-          match = line.match(/by\sPlayer\s\"[a0-z9\s\/]*\"/g)
+          match = line.match(/by\sPlayer\s\"[a0-z9\s\/-]*\"/g)
           const byPlayer = type === 'hit by Infected' ? 'Infected' : (match ? match[0].split('"')[1] : 'ParseWarning')
           match = null
 
-          match = line.match(/pos=\<[0-9]*.[0-9]*, [0-9]*.[0-9]*/g)
+          match = line.match(/pos=\<[0-9]*.*[0-9]*, [0-9]*.*[0-9]*>/g)
           const coords = match ? match.map(c => {
+            const split = c.split(' ')
             return {
-              x: parseFloat(c.substring(5,11)),
-              y: parseFloat(c.substring(13,19))
+              x: parseFloat(split[0].substring(5,split[0].length - 1)).toFixed(1),
+              y: parseFloat(split[1].substring(0, split[1].length - 1)).toFixed(1)
             }
           }).reduce((a,b) => b, ``) : { x: null, y: null }
           match = null
@@ -821,7 +827,17 @@ export default {
           const fromMeters = match ? parseFloat(match[0].split(' ')[1]) : 0
           match = null
 
+          match = line.match(/placed\s[aA-zZ\s]*/)
+          const placed = match ? match[0].substring(`placed `.length, match[0].length) : `Unknown`
+          match = null
+
+          match = line.match(/built\s[aA-zZ\s]*/)
+          const built = match ? match[0].substring(`built `.length, match[0].length) : `Unknown`
+          match = null
+
           return {
+            built,
+            placed,
             line,
             fromMeters,
             time,
@@ -851,9 +867,14 @@ export default {
           if (pc.type === '##### PlayerList') {
             // console.log('pl')
             Object.keys(playerPositionsHash)
-              .forEach(key => iZurvive._map.removeLayer(playerPositionsHash[key]))
+              .forEach(key => {
+                iZurvive._map.removeLayer(playerPositionsHash[key].marker)
+                iZurvive._map.removeLayer(playerPositionsHash[key].label)
+              })
           } else if (pc.coords.x && pc.coords.y) {
             const { x, y } = pc.coords
+
+            let options = null
 
             let color = 'black', fillColor = 'black'
 
@@ -864,26 +885,21 @@ export default {
               case 'hit by Infected': fillColor = 'green'; break;
               case 'hit by FallDamage': fillColor = 'yellow'; break;
               case 'killed by Player': fillColor = 'red'; break;
+              case 'built': fillColor = 'brown'; break;
+              case 'placed': fillColor = 'purple'; break;
               case '\>\\)$': fillColor = 'aqua'; break;
             }
 
-            const options = (fillColor === 'aqua') ? {
-              weight: 5,
-              color: 'blue',
-              fillColor: fillColor,
-              fillOpacity: 0.5,
-              radius: 16000
-            } : {
-              weight: 2,
-              color: 'red',
-              fillColor: fillColor,
-              fillOpacity: 0.75,
-              radius: 4000
-            }
-
-            // console.log(x, y, pc)
-
             if (fillColor === 'aqua') {
+
+              options = {
+                weight: 2.5,
+                color: 'blue',
+                fillColor: fillColor,
+                fillOpacity: 0.5,
+                radius: 10
+              }
+              
               const latlng = L.LocUtil.locToCoords({
                 loc1: x,
                 loc2: y
@@ -896,23 +912,61 @@ export default {
               })
 
               const icon = L.divIcon({
-                className: `animated-player-position player-position-${(Math.random() * 2000).toFixed()}`
+                html: `<div style="width:${pc.player.length * 7.33}px;font-family:monospace;">${pc.player}</div>`
               })
 
-              playerPositionsHash[pc.player] = L
-                .circle([latlng.lat, latlng.lng], options)
+              playerPositionsHash[pc.player] = {
+                marker: L.circleMarker([latlng.lat, latlng.lng], options),
+                label: L.marker([latlng.lat, latlng.lng], {
+                  icon
+                })
+              }
 
-              this.playerStats.markers.push(playerPositionsHash[pc.player])
+              this.playerStats.markers.push(playerPositionsHash[pc.player].marker)
+              this.playerStats.markers.push(playerPositionsHash[pc.player].label)
 
-              playerPositionsHash[pc.player].on('mouseover', (e) => {
-                const content = `${pc.player} @${pc.time}`
+              playerPositionsHash[pc.player].marker.on('mouseover', (e) => {
+                const content = `${pc.player} @${pc.time} and ${x}/${y}`
                 L.popup()
                   .setLatLng(e.latlng) 
                   .setContent(content)
                   .openOn(iZurvive._map)
               })
-              playerPositionsHash[pc.player].addTo(iZurvive._map)
+              playerPositionsHash[pc.player].marker.addTo(iZurvive._map)
+              playerPositionsHash[pc.player].label.addTo(iZurvive._map)
             } else {
+
+              let content = ``
+
+              if (fillColor === 'brown') {
+                options = {
+                  weight: 2,
+                  color: 'yellow',
+                  fillColor: fillColor,
+                  fillOpacity: 0.5,
+                  radius: 5
+                }
+                content = `${pc.player} ${pc.type} ${pc.built} @${pc.time} and ${x}/${y}`
+              } else if (fillColor === 'purple') {
+                content = `${pc.player} ${pc.type} ${pc.placed} @${pc.time} and ${x}/${y}`
+                options = {
+                  weight: 2,
+                  color: 'pink',
+                  fillColor: fillColor,
+                  fillOpacity: 0.5,
+                  radius: 5
+                }
+              } else {
+                content = `${pc.player} ${pc.type} ${pc.byPlayer} from ${pc.fromMeters} meters @${pc.time} and ${x}/${y}`
+                options = {
+                  weight: 1,
+                  color: fillColor,
+                  fillColor: fillColor,
+                  fillOpacity: 0.75,
+                  radius: 2.5
+                }
+              }
+
               const latlng = L.LocUtil.locToCoords({
                 loc1: x,
                 loc2: y
@@ -925,17 +979,19 @@ export default {
               })
 
               const marker = L
-                .circle([latlng.lat, latlng.lng], options)
+                .circleMarker([latlng.lat, latlng.lng], options)
 
               marker.on('mouseover', (e) => {
-                const content = `${pc.player} ${pc.type} ${pc.byPlayer} from ${pc.fromMeters} meters @${pc.time}`
                 L.popup()
                   .setLatLng(e.latlng) 
                   .setContent(content)
                   .openOn(iZurvive._map)
               })
+
               marker.addTo(iZurvive._map)
+
               this.playerStats.markers.push(marker)
+
             }
           }
 
@@ -1938,6 +1994,42 @@ div.media-content > span.tag:not(body) {
 
 span.icon {
   height: 5px;
+}
+
+.leaflet-popup-content-wrapper, .leaflet-popup-tip {
+  background: #ffffffd9;
+  color: #333;
+  box-shadow: 0 3px 14px rgba(0,0,0,0.4);
+  font-weight: bold;
+  text-shadow: 0px 0px 5px white;
+}
+
+.leaflet-tile-pane {
+  opacity: .75;
+}
+
+.leaflet-popup-content-wrapper {
+    border-radius: 0px;
+}
+
+.leaflet-popup-content {
+  margin: 2px 2px;
+}
+
+#map {
+  background-color: black;
+}
+
+.leaflet-marker-icon {
+  margin-left: inherit !important;
+  margin-top: inherit !important;
+  width: inherit !important;
+  height: inherit !important;
+  background-color:white;
+  top: -20px;
+  padding-left:2px;
+  padding-right: 2px;
+  font-weight: bolder;
 }
 
 </style>
