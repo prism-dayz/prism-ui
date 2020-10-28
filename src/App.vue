@@ -213,7 +213,7 @@
 
           <!-- DEPLOY -->
           <b-button type="is-warning" size="is-small" style="margin-right:5px;" icon-left="sign-out-alt"
-            :disabled="!accountForm.nitradoApiKey || !selectedGameserverSetting.id"
+            :disabled="!accountForm.nitradoApiKey || !selectedGameserverSetting.id || restartingGameserver || softDeploying"
             @click="onHardDeploy(selectedService.id)"
             :loading="hardDeploying || deploying"
             >
@@ -222,9 +222,18 @@
 
           <!-- DEPLOY -->
           <b-button outlined type="is-warning" size="is-small" style="margin-right:5px;" icon-left="sign-in-alt"
-            @click="uploadFilesToGameserver(selectedService.id, ftpuname, files)"
-            :disabled="!accountForm.nitradoApiKey || !selectedGameserverSetting.id || deploying">
+            @click="onSoftDeploy(selectedService.id, ftpuname, files)"
+            :disabled="!accountForm.nitradoApiKey || deploying || hardDeploying || restartingGameserver || softDeploying"
+            :loading="softDeploying"
+            >
             Soft Deploy
+          </b-button>
+
+          <b-button outlined type="is-warning" size="is-small" style="margin-right:5px;" icon-left="sign-in-alt"
+            @click="restartGameserver(selectedService.id)"
+            :disabled="!accountForm.nitradoApiKey || deploying || restartingGameserver || !selectedService.id || softDeploying"
+            :loading="restartingGameserver">
+            Restart
           </b-button>
 
           <!-- COMMIT -->
@@ -318,13 +327,14 @@
           <!-- XML EDITORS -->
           <div style="flex-grow:2">
 
-              <div v-if="fileUploadInitialized && selectedFile">
-                <DayzXMLTree ref="dayz_xml_tree" :files="[selectedFile]" @evolve="xmlTreeDirty = true" :dirty="xmlTreeDirty" :freeze="unsavedChanges" />
-              </div>
+            <div v-if="fileUploadInitialized && selectedFile">
+              <DayzXMLTree ref="dayz_xml_tree" :key="selectedFile.id" :files="[selectedFile]" @evolve="onEvolve" :dirty="xmlTreeDirty" :freeze="unsavedChanges" />
+            </div>
 
             <div id="archaeon-xml-editor" style="height:585px;border:1px solid 333;">
               
             </div>
+
           </div>
 
         </div>
@@ -545,11 +555,18 @@ export default {
   },
   data () {
     return {
+      timeSinceLastUpdate: 0,
+      softDeployingTimeout: false,
+      softDeploying: false,
+      restartTimeout: false,
+      restartingGameserver: false,
+      playerPositionsHash: {},
       deploying: false,
       shouldReinstall: false,
       xmlTreeDirty: false,
       selectedFile: null,
       fileUploadInitialized: false,
+      didReinstall: false,
       hardDeploying: false,
       bank: {
         accounts: {}
@@ -572,7 +589,7 @@ export default {
       killfeedDiscordChannel: null,
       serverLog: ``,
       playerStats: {
-        timer: 120,
+        timer: 150,
         timeoutTimer: null,
         timeout: null,
         busy: false,
@@ -643,6 +660,7 @@ export default {
     xmlTreeDirty (newValue, oldValue) {
       if (newValue !== oldValue) {
         if (newValue === true) {
+          console.log('shoud here')
           this.editor.setReadOnly(true)
           document.getElementById('archaeon-xml-editor').style.border = '1px solid blue'
           document.getElementById('archaeon-xml-editor').style.opacity = '0.5'
@@ -687,6 +705,9 @@ export default {
     }
   },
   methods: {
+    onEvolve () {
+      this.xmlTreeDirty = true
+    },
     onChangeSelectedService (event) {
       const published = this.isServerPublished(event.id)
       const registered = this.isServerRegistered(event.id)
@@ -770,12 +791,18 @@ export default {
       }
     },
     parseServerLogFromString (serverLogString) {
-      this.playerStats.markers.forEach(m => {
-        iZurvive._map.removeLayer(m)
-        // console.log(m)
-      })
-      this.playerStats.markers = []
-      const playerPositionsHash = {}
+      // this.playerStats.markers.forEach(m => {
+      //   // iZurvive._map.removeLayer(m)
+      //   // console.log(m)
+      // })
+      // console.log('FUCK YOU', this.playerPositionsHash)
+      Object.keys(this.playerPositionsHash)
+        .forEach(key => {
+          iZurvive._map.removeLayer(this.playerPositionsHash[key].marker)
+          iZurvive._map.removeLayer(this.playerPositionsHash[key].label)
+        })
+      // this.playerStats.markers = []
+      this.playerPositionsHash = {}
       const split = serverLogString.split('\n')
       const transform = split
         .filter(line => line.length > 0)
@@ -784,13 +811,14 @@ export default {
           let lineTypes = [
             'is connected',
             'has been disconnected',
-            'hit by Player',
-            'hit by Infected',
-            'hit by FallDamage',
+            // 'hit by Player',
+            // 'hit by Infected',
+            // 'hit by FallDamage',
             'killed by Player',
             '##### PlayerList',
             'built',
             'placed',
+            'killed by',
             '\>\\)$'
           ]
 
@@ -835,6 +863,16 @@ export default {
           const built = match ? match[0].substring(`built `.length, match[0].length) : `Unknown`
           match = null
 
+          let killedBy = null
+
+          if (line.match(/killed\sby\sLandMineTrap/g)) {
+            killedBy = 'LandMineTrap'
+          }
+
+          if (line.match(/with\s6-M7\sFrag\sGrenade/g)) {
+            killedBy = 'FragGrenade'
+          }
+
           return {
             built,
             placed,
@@ -843,6 +881,7 @@ export default {
             time,
             player,
             byPlayer,
+            killedBy,
             type,
             forDamage,
             coords
@@ -866,10 +905,10 @@ export default {
           // console.log(pc.type === '##### PlayerList', pc.type)
           if (pc.type === '##### PlayerList') {
             // console.log('pl')
-            Object.keys(playerPositionsHash)
+            Object.keys(this.playerPositionsHash)
               .forEach(key => {
-                iZurvive._map.removeLayer(playerPositionsHash[key].marker)
-                iZurvive._map.removeLayer(playerPositionsHash[key].label)
+                iZurvive._map.removeLayer(this.playerPositionsHash[key].marker)
+                iZurvive._map.removeLayer(this.playerPositionsHash[key].label)
               })
           } else if (pc.coords.x && pc.coords.y) {
             const { x, y } = pc.coords
@@ -881,12 +920,13 @@ export default {
             switch (pc.type) {
               case 'is connected': fillColor = 'lime'; break;
               case 'has been disconnected': fillColor = 'black'; break;
-              case 'hit by Player': fillColor = 'orange'; break;
-              case 'hit by Infected': fillColor = 'green'; break;
-              case 'hit by FallDamage': fillColor = 'yellow'; break;
+              // case 'hit by Player': fillColor = 'orange'; break;
+              // case 'hit by Infected': fillColor = 'green'; break;
+              // case 'hit by FallDamage': fillColor = 'yellow'; break;
               case 'killed by Player': fillColor = 'red'; break;
               case 'built': fillColor = 'brown'; break;
               case 'placed': fillColor = 'purple'; break;
+              case 'killed by': fillColor = 'red'; break;
               case '\>\\)$': fillColor = 'aqua'; break;
             }
 
@@ -915,49 +955,53 @@ export default {
                 html: `<div style="width:${pc.player.length * 7.33}px;font-family:monospace;">${pc.player}</div>`
               })
 
-              playerPositionsHash[pc.player] = {
+              this.playerPositionsHash[pc.player] = {
                 marker: L.circleMarker([latlng.lat, latlng.lng], options),
                 label: L.marker([latlng.lat, latlng.lng], {
                   icon
                 })
               }
 
-              this.playerStats.markers.push(playerPositionsHash[pc.player].marker)
-              this.playerStats.markers.push(playerPositionsHash[pc.player].label)
+              // this.playerStats.markers.push(this.playerPositionsHash[pc.player].marker)
+              // this.playerStats.markers.push(this.playerPositionsHash[pc.player].label)
 
-              playerPositionsHash[pc.player].marker.on('mouseover', (e) => {
+              this.playerPositionsHash[pc.player].marker.on('mouseover', (e) => {
                 const content = `${pc.player} @${pc.time} and ${x}/${y}`
                 L.popup()
                   .setLatLng(e.latlng) 
                   .setContent(content)
                   .openOn(iZurvive._map)
               })
-              playerPositionsHash[pc.player].marker.addTo(iZurvive._map)
-              playerPositionsHash[pc.player].label.addTo(iZurvive._map)
+              this.playerPositionsHash[pc.player].marker.addTo(iZurvive._map)
+              this.playerPositionsHash[pc.player].label.addTo(iZurvive._map)
             } else {
 
               let content = ``
 
               if (fillColor === 'brown') {
                 options = {
-                  weight: 2,
+                  weight: 1,
                   color: 'yellow',
                   fillColor: fillColor,
                   fillOpacity: 0.5,
-                  radius: 5
+                  radius: 3.5
                 }
                 content = `${pc.player} ${pc.type} ${pc.built} @${pc.time} and ${x}/${y}`
               } else if (fillColor === 'purple') {
                 content = `${pc.player} ${pc.type} ${pc.placed} @${pc.time} and ${x}/${y}`
                 options = {
-                  weight: 2,
+                  weight: 1,
                   color: 'pink',
                   fillColor: fillColor,
                   fillOpacity: 0.5,
-                  radius: 5
+                  radius: 3.5
                 }
               } else {
-                content = `${pc.player} ${pc.type} ${pc.byPlayer} from ${pc.fromMeters} meters @${pc.time} and ${x}/${y}`
+                if (pc.killedBy) {
+                  content = `${pc.player} ${pc.type} ${pc.killedBy} @${pc.time} and ${x}/${y}`
+                } else {
+                  content = `${pc.player} ${pc.type} ${pc.byPlayer} from ${pc.fromMeters} meters @${pc.time} and ${x}/${y}`
+                }
                 options = {
                   weight: 1,
                   color: fillColor,
@@ -1099,6 +1143,8 @@ export default {
       this.playerStats.deaths = deaths.map((stat, i) => ({ ...stat, rank: i + 1 }))
       kds.sort((a,b) => b.kds - a.kds)
       this.playerStats.kds = kds.map((stat, i) => ({ ...stat, rank: i + 1 }))
+
+      return Promise.resolve()
     },
     nitradoApiRequest (method, path) {
       const options = {
@@ -1273,91 +1319,101 @@ export default {
     },
     async onTurnOnPlayerStats (value) {
       if (value === true) {
+        this.timeSinceLastUpdate = 0
         try {
           this.playerStats.busy = true
           const method = 'GET'
           const sid = this.selectedService.id
           const gameserver = this.selectedServer.data.gameserver
           const { details: { portlist_short } } = this.selectedService
-          const logFile = gameserver.game_specific.log_files.length > 0 ? gameserver.game_specific.log_files[0].replace(`${portlist_short}/`,'') : ``
-          const filePath = gameserver.game_specific.path
-          if (logFile.length > 0) {
-            const file = `${filePath}${logFile}`
-            const path = `/services/${sid}/gameservers/file_server/download?file=${file}`
-            const response = await this.nitradoApiRequest(method, path)
-              .then(response => response.json())
-            console.log('log', response)
-            const url = response.data.token.url
-            console.log('url', url)
-            const method1 = 'GET'
-            const path1 = url
-            const response1 = await fetch(path1, { method: method1 })
-              .then(response => response.body)
-            const readableStream = response1
-            console.log('response1', response1)
-            const ts = new TransformStream(new Uint8ArrayToStringsTransformer())
-            const reader = readableStream.pipeThrough(ts).getReader()
-            let i = 0, accumulator = ``
-            while (true) {
-                const { done, value } = await reader.read()
-                if (value) {
-                  accumulator = `${accumulator}${value}\n`
-                }
-                if (done) break
-            }
-            this.serverLog = accumulator
-            if (this.serverLogPrevLength < 1) {
-              this.serverLogPrevLength = this.serverLog.length
-            }
-            if (this.serverLog.length > this.serverLogPrevLength) {
-              const newLines = this.serverLog.substring(this.serverLogPrevLength, this.serverLog.length)
-              newLines.split('\n')
-                .forEach(value => {
-                  if (value.match(/killed by Player/g) && false) {
-                    console.log(value)
-                    const victim = value.match(/\|\sPlayer\s\"[a0-z9\s\/]*\"/g)
-                      .reduce((a,c) => c.split('"')[1], ``)
-                    const killer = value.match(/by\sPlayer\s\"[a0-z9\s\/]*\"/g)
-                      .reduce((a,c) => c.split('"')[1], ``)
-                    const weapon = value.match(/with\s[a0-z9\/\-]*/g)[0]
-                      .split(' ')[1]
-                    // cuz sometimes it's not there
-                    let meters = value.match(/from\s[0-9]*\.[0-9]*\smeters/g)
-                    meters = meters ? meters.reduce((a,c) => c.split(' ')[1], ``) : `0`
-                    console.log(victim, killer, weapon, meters)
-                    const client = this.discordBot.client
-                    client.guilds.cache.find(guild => console.log(guild))
-                    const experimental = client.channels.cache.find(channel => channel.name === 'killbox')
-                    let feed = `__${killer}__ killed _${victim}_ with ${weapon}`
-                    feed = meters === `0` ? feed : `${feed} from ${meters} meters`
-                    feed = `${feed}.`
-                    experimental.send(feed)
-                    const claimedBounties = this.bounties.list
-                      .filter(bounty => bounty.playerName === victim)
-                    const reward = claimedBounties.reduce((a,c) => a + (c.reward), 0)
-                    claimedBounties.forEach(claimedBounty => {
-                      this.bounties.list = this.bounties.list.filter(bounty => bounty.playerName !== victim)
-                      experimental.send(`Bounty claimed on _${victim}_ for c${claimedBounty.reward} by __${killer}__!`)
-                    })
-                    if (this.bank.accounts[killer]) {
-                      this.bank.accounts[killer].balance = this.bank.accounts[killer].balance + reward
-                    } else {
-                      this.bank.accounts[killer] = {
-                        balance: reward
-                      }
+          if (gameserver.game_specific.log_files.length > 0) {
+
+            let logs = [ ...gameserver.game_specific.log_files ]
+
+            logs.reverse()
+
+            let whatthefuck = 1
+
+            await logs.reduce(async (a,c) => await a.then(async () => {
+
+              const logFile = c.replace(`${portlist_short}/`,'')
+              const filePath = gameserver.game_specific.path
+
+              this.$buefy.snackbar.open({
+                  message: `Parsing ${logFile.split('/')[1]} ${whatthefuck}/${logs.length} logs.`,
+                  type: 'is-warning',
+                  position: 'is-top-left',
+                  actionText: 'OK',
+                  indefinite: false,
+                  queue: false,
+                  duration: 15000
+              })
+
+              whatthefuck++
+
+              const file = `${filePath}${logFile}`
+              const path = `/services/${sid}/gameservers/file_server/download?file=${file}`
+              const response = await this.nitradoApiRequest(method, path)
+                .then(response => response.json())
+              console.log('log', file, response)
+              
+              if (response && response.data && response.data.token && response.data.token.url) {
+                const url = response.data.token.url
+                console.log('url', url)
+                const method1 = 'GET'
+                const path1 = url
+                const response1 = await fetch(path1, { method: method1 })
+                  .then(response => response.body)
+                const readableStream = response1
+                console.log('response1', response1)
+                const ts = new TransformStream(new Uint8ArrayToStringsTransformer())
+                const reader = readableStream.pipeThrough(ts).getReader()
+                let i = 0, accumulator = ``
+                while (true) {
+                    const { done, value } = await reader.read()
+                    if (value) {
+                      accumulator = `${accumulator}${value}\n`
                     }
-                  }
-                })
-            }
-            this.serverLogPrevLength = this.serverLog.length
-            this.parseServerLogFromString(this.serverLog)
-            this.playerStats.timer = 120
+                    if (done) break
+                }
+
+                await this.parseServerLogFromString(accumulator)
+              }
+
+              return Promise.resolve()
+
+            }), Promise.resolve())
+            this.$buefy.snackbar.open({
+                message: `Map is synced!`,
+                type: 'is-success',
+                position: 'is-top-left',
+                actionText: 'OK',
+                indefinite: false,
+                queue: false,
+                duration: 15000
+            })
+            this.playerStats.timer = 150
             this.playerStats.timeout = setTimeout(() => {
+              this.playerStats.markers.forEach(m => {
+                iZurvive._map.removeLayer(m)
+              })
+              this.playerStats.markers = []
               this.onTurnOnPlayerStats(true)
-            }, 120000)
+            }, 150000)
             clearInterval(this.playerStats.timeoutTimer)
             this.playerStats.timeoutTimer = setInterval(() => {
               this.playerStats.timer--
+              this.timeSinceLastUpdate++
+              if (((this.timeSinceLastUpdate + 1) % 30) === 0) {
+                this.$buefy.snackbar.open({
+                    message: `Sync is ${this.timeSinceLastUpdate + 1} seconds old...`,
+                    type: `is-info`,
+                    position: 'is-top-left',
+                    actionText: 'OK',
+                    queue: false,
+                    duration: 60000
+                })
+              }
             }, 1000)
             this.playerStats.busy = false
           }
@@ -1462,9 +1518,17 @@ export default {
         resolve()
       })
     },
+    async restartGameserver (sid) {
+      this.restartingGameserver = true
+      this.restartTimeout = false
+      this.stopGameserver(sid)
+    },
+    async onSoftDeploy (sid, ftpuname, files) {
+      this.softDeploying = true
+      await this.stopGameserver(sid)
+    },
     async onHardDeploy (sid) {
-      this.deploying = true
-      this.hardDeploying = false
+      this.hardDeploying = true
       this.shouldReinstall = true
       this.stopGameserver(sid)
     },
@@ -1507,48 +1571,93 @@ export default {
             } else if (wsMessage.type === 'status') {
               const serverState = wsMessage.data
               this.terminalOutput.push(`deploy> gameserver is ${serverState}`)
-              if (serverState === 'started') {
-                if (this.lastRestart === false) {
-                  this.lastRestart = true
-                  this.terminalOutput.push(`deploy> reinstalled`)
-                  this.stopGameserver(sid)
-                } else {
-                  this.lastRestart = false
-                  this.terminalOutput.push(`deploy> success`)
-                  this.hardDeploying = false
-                  this.deploying = false
-                }
-              }
-              if ((serverState === 'stopped') && this.lastRestart === true) {
-                this.terminalOutput.push(`deploy> restoring settings ${setId}`)
-                await this.restoreGameServerSettings(sid, setId)
-                this.terminalOutput.push(`deploy> uploading xml files to ${ftpuname}`)
-                await this.uploadFilesToGameserver(sid, ftpuname, files)
-                await this.startGameserver(sid)
+              switch (serverState) {
+                case 'gs_installation':
+
+                break;
+                case 'restarting':
+
+                break;
+                case 'stopping':
+                  
+                break;
+                case 'stopped':
+                  if (this.didReinstall) {
+                    this.terminalOutput.push(`deploy> restoring settings ${setId}`)
+                    await this.restoreGameServerSettings(sid, setId)
+                    this.terminalOutput.push(`deploy> uploading xml files to ${ftpuname}`)
+                    await this.uploadFilesToGameserver(sid, ftpuname, files)
+                    await this.startGameserver(sid)
+                    this.didReinstall = false
+                  }
+                  if (this.shouldReinstall) {
+                    const method = `POST`
+                    const { details: { portlist_short } } = this.selectedService
+                    const path = `/services/${sid}/gameservers/games/install?game=${portlist_short}`
+                    const response = await this.nitradoApiRequest(method, path)
+                    this.shouldReinstall = false
+                    this.didReinstall = true
+                  }
+                break;
+                case 'started':
+                  if (this.didReinstall) {
+                    this.stopGameserver(sid)
+                  }
+                  if (!this.didReinstall) {
+                    this.hardDeploying = false
+                    this.terminalOutput.push(`deploy> success`)
+                  }
+                break;
               }
             } else {
               console.log('hmmmm', wsMessage)
             }
-          } else {
+          } else if (this.restartingGameserver === true) {
             if (wsMessage.type === 'status') {
-              this.terminalOutput.push(`status> ${wsMessage.data}`)
-              if (wsMessage.data === 'stopped' && this.shouldReinstall === true) {
-                const method = `POST`
-                const { details: { portlist_short } } = this.selectedService
-                const path = `/services/${sid}/gameservers/games/install?game=${portlist_short}`
-                try {
-                  const response = await this.nitradoApiRequest(method, path)
-                  this.hardDeploying = true
-                  this.shouldReinstall = false
-                } catch (e) {
-                  console.log(e)
+              const serverState = wsMessage.data
+              this.terminalOutput.push(`restart> gameserver is ${serverState}`)
+              if (serverState === 'started') {
+                this.terminalOutput.push(`restart> success`)
+                this.restartingGameserver = false
+              }
+              if (serverState === 'stopped') {
+                this.terminalOutput.push(`restart> rebooting in 30 seconds`)
+                if (this.restartTimeout === false) {
+                  this.restartTimeout = true
+                  setTimeout(() => {
+                    this.terminalOutput.push(`restart> starting`)
+                    this.startGameserver(sid)
+                  }, 30000)
                 }
               }
             }
-            if (wsMessage.type === 'query') {
-              const keys = Object.keys(wsMessage.data)
-              keys.forEach(key => this.terminalOutput.push(`query> ${key} ${wsMessage.data[key]}`))
+          } else if (this.softDeploying === true) {
+            if (wsMessage.type === 'status') {
+              const serverState = wsMessage.data
+              this.terminalOutput.push(`deploy> gameserver is ${serverState}`)
+              if (serverState === 'started') {
+                this.terminalOutput.push(`deploy> success`)
+                this.softDeploying = false
+              }
+              if (serverState === 'stopped') {
+                this.terminalOutput.push(`deploy> attempting to upload files`)
+                await this.uploadFilesToGameserver(sid, this.ftpuname, this.files)
+                this.terminalOutput.push(`deploy> starting gameserver`)
+                this.startGameserver(sid)
+              }
             }
+          }
+          if (wsMessage.type === 'query') {
+            this.terminalOutput.push(`query> ${wsMessage.data.player_current} players`)
+              this.$buefy.snackbar.open({
+                  message: `There are ${wsMessage.data.player_current} players online.`,
+                  type: 'is-white',
+                  position: 'is-top-left',
+                  actionText: 'OK',
+                  indefinite: false,
+                  queue: false,
+                  duration: 15000
+              })
           }
         })
 
@@ -1633,6 +1742,7 @@ export default {
       this.accountForm = { ...account }
     },
     async onLoadFile (fileContent, paths) {
+      console.log('onLoadFile')
       let confirmation = false
       if (this.unsavedChanges || this.xmlTreeDirty) {
         confirmation = await new Promise((resolve, reject) => {
@@ -1643,14 +1753,18 @@ export default {
           })
         })
       }
-      if (confirmation) {
+      if (confirmation === true) {
         this.onCommit()
       }
       this.loadedFile = { fileContent, path: paths.join('/') }
+      // console.log('loaded file', this.loadedFile)
       const files = this.files
         .filter(file => file.path === this.loadedFile.path)
+        .map(file => ({ ...file, id: Math.random() }))
+      // console.log('files', files)
       this.selectedFile = files
         .reduce((a, c) => c, null)
+      // console.log('selectyed file', this.selectedFile)
       const content = files
         .reduce((a, c) => c.contents, ``)
       this.editor.session.setValue(XmlFormatter(content))
@@ -1722,7 +1836,8 @@ export default {
       const xmlTreeContents = this.$refs.dayz_xml_tree.branches.reduce((a, c) => serializer.serializeToString(c.xmlDoc), null)
       const xmlRawContents = this.editor.getValue()
       const newContents = this.xmlTreeDirty ? xmlTreeContents : xmlRawContents
-      if (this.xmlTreeDirty) {
+      console.log('this.xmlTreeDirty', this.xmlTreeDirty)
+      if (this.xmlTreeDirty === true) {
         this.editor.session.setValue(XmlFormatter(newContents))
       }
       if (this.unsavedChanges) {
@@ -1743,7 +1858,7 @@ export default {
       this.busyCommit = false
       this.unsavedChanges = false
       this.xmlTreeDirty = false
-      this.$forceUpdate()
+      // this.$forceUpdate()
     },
     initXmlEditor () {
       this.editor = ace.edit('archaeon-xml-editor')
@@ -2030,6 +2145,25 @@ span.icon {
   padding-left:2px;
   padding-right: 2px;
   font-weight: bolder;
+}
+
+div.snackbar.is-success.is-top-left {
+  border: 1px solid lime;
+}
+
+div.snackbar.is-warning.is-top-left {
+  border: 1px solid yellow;
+}
+
+div.snackbar.is-info.is-top-left {
+  border: 1px solid white;
+}
+
+.olga {
+  background: url('./assets/loot-icons.png');
+  height: 75px !important;
+  width: 75px !important;
+  background-position: 0px -750px;
 }
 
 </style>

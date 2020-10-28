@@ -1,7 +1,6 @@
 <template>
   <div class="home">
     <!-- ../assets/chernarus-bga.png -->
-    home
   </div>
 </template>
 

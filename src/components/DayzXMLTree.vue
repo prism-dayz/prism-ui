@@ -13,7 +13,7 @@
           <b-icon class="is-pulled-right" :icon="props.expanded ? 'menu-down' : 'menu-up'"></b-icon>
         </template>
 
-        <Tree :branches="[branch.xmlDoc.documentElement]" :key="Math.random()" @mutate="$emit('evolve')" :freeze="freeze" />
+        <Tree :key="treeKey" :branches="[branch.xmlDoc.documentElement]" @mutate="onMutate" :freeze="freeze" />
 
       </b-menu-item>
     </b-menu-list>
@@ -42,9 +42,13 @@ export default {
         }
       })
     return {
+      treeKey: null,
       accordion: false,
       branches
     }
+  },
+  mounted () {
+    this.treeKey = Math.random()
   },
   computed: {
     getBranches () {
@@ -72,10 +76,10 @@ export default {
       }
       return `1px solid #4b4b4b;`
     },
-    onEvolve (branch) {
-      const serializer = new XMLSerializer()
-      const xmlString = serializer.serializeToString(branch)
-      this.$emit('tree', xmlString)
+    onMutate () {
+      // const serializer = new XMLSerializer()
+      // const xmlString = serializer.serializeToString(branch)
+      this.$emit('evolve')
     }
   }
 }
