@@ -78,13 +78,6 @@ export default {
             dy: 7961.958744725942,
             switchedCoords: false
           })
-          // const marker = L.marker(latLng, {
-          //   icon: L.divIcon({
-          //     className: 'olga',
-          //     iconAnchor: [-375,850],
-          //     iconSize: [25,25]
-          //   })
-          // })
           const circle = L.circle(latLng, {
             color: 'cyan',
             fillColor: fillColor,
@@ -95,15 +88,17 @@ export default {
           })
           circle.on('mouseover', (e) => {
             const content = `${branch.getAttribute('name')}\n${childNode.getAttribute('x')}/${childNode.getAttribute('z')}&nbsp;&nbsp;&nbsp;&nbsp;`
-            L.popup()
+            const popup = L.popup()
               .setLatLng(e.latlng) 
               .setContent(content)
               .openOn(iZurvive._map)
+            childNode.popup = popup
           })
           circle.on('mousedown', () => {
+            // circle.removeEventListener('mouseover')
+            // window.iZurvive._map.removeLayer(childNode.popup)
             window.iZurvive._map.dragging.disable()
             window.iZurvive._map.on('mousemove', (e) => {
-              // marker.setLatLng(e.latlng)
               circle.setLatLng(e.latlng)
               const yX = L.LocUtil.coordsToYx(e.latlng, {
                 kx: 0.00039746552365541434,
@@ -120,16 +115,27 @@ export default {
               doSet(childNode, 'x', x)
               doSet(childNode, 'z', y)
               this.$refs['treeRef'][i].$forceUpdate()
-              this.shouldEmitMutate = true
+              // this.shouldEmitMutate = true
             })
           })
           window.iZurvive._map.on('mouseup', (e) => {
             window.iZurvive._map.dragging.enable()
             window.iZurvive._map.removeEventListener('mousemove')
-            if (this.shouldEmitMutate) {
+            console.log('here8', this.shouldEmitMutate, circle)
+            // childNode.popup.openOn(iZurvive._map)
+            // if (this.shouldEmitMutate) {
+              // console.log('did it')
+              // circle.on('mouseover', (e) => {
+              //   const content = `${branch.getAttribute('name')}\n${childNode.getAttribute('x')}/${childNode.getAttribute('z')}&nbsp;&nbsp;&nbsp;&nbsp;`
+              //   const popup = L.popup()
+              //     .setLatLng(e.latlng) 
+              //     .setContent(content)
+              //     .openOn(iZurvive._map)
+              //   childNode.popup = popup
+              // })
               this.onMutate()
-              this.shouldEmitMutate = false
-            }
+            //   this.shouldEmitMutate = false
+            // }
           })
           circle.addTo(window.iZurvive._map)
           // marker.addTo(window.iZurvive._map)
@@ -139,7 +145,6 @@ export default {
       console.log(branch, i)
       const clone = branch.cloneNode(true)
       branch.parentNode.appendChild(clone)
-      this.$parent.$forceUpdate()
       this.onUpdate(branch)
     },
     onCloneAndAug (branch, i) {
@@ -164,7 +169,8 @@ export default {
     onMutate () {
       this.$emit('mutate')
     },
-    onUpdate (branch) { 
+    onUpdate (branch) {
+      this.$forceUpdate()
       this.$emit('mutate')
       // this.onMutate()
       // console.log('updated')

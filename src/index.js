@@ -316,17 +316,33 @@ const parseServerLog = async (sid, user, serverLog, ftpPath, /** actually newest
             try {
               const pid = line.match(/(id=[a-zA-Z0-9_-]*)/g)[0].split('id=')[1]
               const pname = player
-              const psquery = `update playersservers set psstatus = 1 where pid = $1 and sid = $2 returning *`
-              const psparameters = [pid, sid]
-              const psresult = await db.query(psquery, psparameters)
-              if (psresult.rows.length === 0) {
+
+              const pquery = `select * from players where pid = $1 and pname = $2`
+              const pparameters = [pid, pname]
+              const presult = await db.query(pquery, pparameters)
+
+              if (presult.rows.length === 0) {
                 const pquery = `insert into players (pid, pname) values ($1, $2) returning *`
                 const pparameters = [pid, pname]
-                const presult = await db.query(pquery, pparameters)
+                const presult1 = await db.query(pquery, pparameters)
                 const psquery = `insert into playersservers (pid, sid, psstatus) values ($1, $2, 1) returning *`
                 const psparameters = [pid, sid]
                 const psresult = await db.query(psquery, psparameters)
+              } else {
+                const pquery = `select * from playersservers where pid = $1 and sid = $2`
+                const pparameters = [pid, sid]
+                const presult = await db.query(pquery, pparameters)
+                if (presult.rows.length === 0) {
+                  const psquery = `insert into playersservers (pid, sid, psstatus) values ($1, $2, 1) returning *`
+                  const psparameters = [pid, sid]
+                  const psresult = await db.query(psquery, psparameters)
+                } else {
+                  const psquery = `update playersservers set psstatus = 1 where pid = $1 and sid = $2 returning *`
+                  const psparameters = [pid, sid]
+                  const psresult = await db.query(psquery, psparameters)
+                }
               }
+
             } catch (e) {
               console.log('could not update or create player', e, line)
             }
@@ -1397,7 +1413,7 @@ client.on('message', async message => {
           ctx.fillRect(20, 20, 885, 600 + 4)
           ctx.stroke()
           
-          rankQuery.rows.pop()
+          // rankQuery.rows.pop()
           const rows = rankQuery.rows
           const x = [{
             pname: 'survivor',
@@ -1413,9 +1429,9 @@ client.on('message', async message => {
             rankk: 'rank'
           }, ...rows]
 
-          for (let i = 1; i < 50; i++) {
+          for (let i = 0; i < 50; i++) {
             ctx.fillStyle = i % 2 > 0 ? 'rgba(15,0,0,1)' : 'rgba(50,50,50,1)'
-            if (rows[i-1].psstatus === 1) {
+            if (rows[i-1] && rows[i-1].psstatus === 1) {
               ctx.fillStyle = 'rgba(0,25,0,1)'
             }
             ctx.beginPath()
