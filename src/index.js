@@ -1,3 +1,5 @@
+const https = require('https')
+const fs = require('fs')
 const express = require('express')
 const session = require('express-session')
 const cors = require('cors')
@@ -27,7 +29,17 @@ const {
 const { Client: DiscordClient, MessageEmbed, MessageAttachment, RichEmbed } = require('discord.js')
 const { createCanvas, loadImage } = require('canvas')
 
+const whitelistDb = './src/whitelist.hash'
+const whitelistDbBuffer = fs.readFileSync(whitelistDb)
+const whitelist = JSON.parse(whitelistDbBuffer.toString())
+
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+// ssl
+const sslOptions = {
+  key: fs.readFileSync('/Users/bgoodson/Desktop/benches/2020-06-08/archaeon/archaeon-ssl.key'),
+  cert: fs.readFileSync('/Users/bgoodson/Desktop/benches/2020-06-08/archaeon/archaeon-ssl.pem')
+}
 
 // helpers functions
 const authorized = () => {
@@ -205,8 +217,226 @@ const parseServerLog = async (sid, user, serverLog, ftpPath, /** actually newest
   const newLog = serverLog.body.substring(startbytes, recentSize)
 
   // update the database with the stats
-  const lineObjects = newLog.split('\n')
-    .filter(line => line.length > 0)
+  let lineObjects = newLog.split('\n')
+
+  const v2Feed = lineObjects.map((objectLine) => {
+    const time = objectLine.match(/[0-9]{2}:[0-9]{2}:[0-9]{2}/g)
+    const playersMatch = objectLine.match(/Player\s[\"|\'][a0-z9\s\/\-\_]*[\"|\']/g)
+    const players = playersMatch ? playersMatch.map(player => {
+      const split = player.split('\"')[1]
+      return `${split}`
+    }) : []
+    const killed = objectLine.match(/\skilled\s/g) ? true : false
+    const hit = objectLine.match(/\shit\s/g) ? true : false
+    const pveMatch = objectLine.match(/by[\s]{1,2}[a0-z9\/\-\_\s]*/g)
+    const isPve = (pveMatch && players.length < 2)
+    const pve = isPve ? (
+      pveMatch[0].match(/by\s\swith\s/g) ? pveMatch[0].split('by  with ').join('') : (
+        pveMatch[0].match(/\sinto\s/g) ? pveMatch[0].split(' into ').join('').split('by ').join('') : (
+          pveMatch[0].match(/explosion/g) ? objectLine.split('explosion').pop().trim().split(/[(|)]/g).join('') : pveMatch[0].split('by ').join('')
+        )
+      )
+    ) : false
+    const item = [objectLine.match(/\)\swith\s[a0-z9\-\s]*/g)]
+      .filter(x => x !== null)
+      .reduce((a,c) => c, [])
+      .map(match => match.split(') with ').join(''))
+      .map(string => string.split(' from ')[0])
+      .reduce((a,c) => c, false)
+    const melee = [objectLine.match(/\(Melee[a0-z9\_]*\)/g)]
+      .filter(x => x !== null)
+      .reduce((a,c) => c, [])
+      .map(match => match.split(/[(|)]/g).join(''))
+      .reduce((a,c) => c, false)
+    const headshot = [objectLine.match(/Head\([0-9]*\)/g)]
+      .filter(x => x !== null)
+      .reduce((a,c) => c, [])
+      .reduce((a,c) => true, false)
+    const brainshot = [objectLine.match(/Brain\([0-9]*\)/g)]
+      .filter(x => x !== null)
+      .reduce((a,c) => c, [])
+      .reduce((a,c) => true, false)
+    const meters = [objectLine.match(/from\s[0-9]*\.[0-9]*\smeters/g)]
+      .filter(x => x !== null)
+      .reduce((a,c) => c, [])
+      .map(meters => meters.split(' meters').join('').split('from ').join(''))
+    const coords = [objectLine.match(/pos=<[0-9]*.[0-9]*,\s[0-9]*.[0-9]*,\s/g)]
+      .filter(x => x !== null)
+      .reduce((a,c) => c, [])
+      .map(match => {
+        const coords = match.split('pos=<').join('').split(', ')
+        coords.pop()
+        return coords
+      })
+      .reduce((a,c) => c, [])
+    const suicide = objectLine.match(/suicide/g) ? true : false
+    const unconscious = objectLine.match(/unconscious/g) ? true : false
+    const reconscious = objectLine.match(/\sconscious/g) ? true : false
+    const connected = objectLine.match(/is\sconnected/g) ? true : false
+    const disconnected = objectLine.match(/has\sbeen\sdisconnected/g) ? true : false
+    return {
+      disconnected,
+      connected,
+      reconscious,
+      unconscious,
+      suicide,
+      coords,
+      headshot,
+      brainshot,
+      melee,
+      meters,
+      item,
+      pve,
+      killed,
+      hit,
+      players,
+      time,
+      original: objectLine
+    }
+  })
+  
+  v2Feed.forEach((event, eventIndex) => {
+    if (shouldKillfeed) {
+      // killfeed
+      const experimental = client.channels.cache.find(channel => `${channel.id}` === `${schannel}`)
+      if (event.killed) {
+        if (event.pve) {
+          if (event.players[0] !== `Unknown/Dead Entity`) {
+            experimental.send(`PvE \`${event.pve.trim()}\` **killed** \`NPC\` <https://dayz.ginfo.gg/#location=${event.coords[0]};${event.coords[1]}>`)
+          }
+        } else {
+          const prevEvent = v2Feed[eventIndex - 1] ? v2Feed[eventIndex - 1] : false
+          if (event.players[0] === `Unknown/Dead Entity`) {
+            experimental.send([
+              `PvE \`${event.players[1]}\` **killed** \`NPC\` with *${event.item}*`,
+              event.meters.length > 0 ? ` from __${event.meters}__ meters` : ``,
+              prevEvent.headshot ? ` (headshot)` : ``,
+              prevEvent.brainshot ? ` (brainshot)` : ``,
+              ` <https://dayz.ginfo.gg/#location=${event.coords[0]};${event.coords[1]}>`
+            ].join(''))
+          } else {
+            experimental.send(`\`${event.players[1]}\` **killed** \`${event.players[0]}\` with *${event.item}*${event.meters.length > 0 ? ` from __${event.meters}__ meters` : `` } <https://dayz.ginfo.gg/#location=${event.coords[0]};${event.coords[1]}>`)
+          }
+        }
+      } else if (event.suicide) {
+        experimental.send(`PvE \`${event.players[0]}\` **committed suicide** <https://dayz.ginfo.gg/#location=${event.coords[0]};${event.coords[1]}>`)
+      } else if (event.hit) {
+        if (event.pve) {
+          if (event.pve.trim().match(/Zmb[M|F]/g) && !event.players[0].match(/Unknown\/Dead\sEntity/g)) {
+            // experimental.send(`PvE \`${event.pve.trim()}\` **hit** \`${event.players[0]}\``)
+          } else if (event.pve.trim().match(/Grenade|Trap/g) && event.players[0] !== 'Unknown/Dead Entity') {
+            experimental.send(`PvE \`${event.pve.trim()}\` **hit** \`${event.players[0]}\` <https://dayz.ginfo.gg/#location=${event.coords[0]};${event.coords[1]}>`)
+          } else if (event.pve.trim() === 'FallDamage') {
+            // experimental.send(`PvE \`${event.players[0]}\` fell`)
+          }
+        } else {
+          if (event.melee) {
+            // experimental.send(`\`${event.players[1]}\` **hit** \`${event.players[0]}\` with ${event.melee}`)
+          } else {
+            if (event.players[0] === `Unknown/Dead Entity`) {
+              // experimental.send(`PvE \`${event.players[1]}\` **hit** NPC with ${event.item}${event.meters.length > 0 ? ` from ${event.meters} meters` : `` } https://dayz.ginfo.gg/#location=${event.coords[0]};${event.coords[1]}`)
+            } else {
+              // experimental.send(`\`${event.players[1]}\` **hit** \`${event.players[0]}\` with ${event.item}${event.meters.length > 0 ? ` from ${event.meters} meters` : `` } https://dayz.ginfo.gg/#location=${event.coords[0]};${event.coords[1]}`)
+            }
+          }
+        }
+      } else if (event.connected) {
+        // experimental.send(`\`${event.players[0]}\` connected`)
+      } else if (event.disconnected) {
+        // experimental.send(`\`${event.players[0]}\` disconnected`)
+      }
+      function check_a_point(a, b, x, y, r) {
+          var dist_points = (a - x) * (a - x) + (b - y) * (b - y);
+          r *= r;
+          if (dist_points < r) {
+              return true;
+          }
+          return false;
+      }
+      // for trader
+      try {
+        const { coords, players } = event
+        const [x, y] = coords
+        const [player] = players
+        // 12102.81 / 12477.11
+        const inCircle = check_a_point(12102.81, 12477.11, parseFloat(x), parseFloat(y), 600)
+        if (inCircle && player && x && y && player !== 'Unknown/Dead Entity' && (`${sid}` === `7039821`)) {
+          const channelJudges = client.channels.cache.find(channel => `${channel.id}` === `785334488229478431`)
+          // const info = JSON.stringify(event, null, 2)
+          if (!whitelist[`${player}`]) {
+            channelJudges.send(`**EPD ALERT**: \`${player}\` at __NEAF Trader Safe Zone__ <https://dayz.ginfo.gg/#location=${x};${y}> \`\`\`${event.original}\`\`\``)
+          }
+        }
+      } catch (e) {
+        console.log('could not determine if in circle, trader')
+      }
+      // for npc judges
+      try {
+        const { coords, players } = event
+        const [x, y] = coords
+        const [player] = players
+
+        const npcJudgeLocations = [
+          {
+            "x": "6815.72",
+            "z": "3010.08"
+          },
+          {
+            "x": "5814.01",
+            "z": "2200.45"
+          },
+          {
+            "x": "9929.78",
+            "z": "1620.16"
+          },
+          {
+            "x": "10596.32",
+            "z": "2531.61"
+          },
+          {
+            "x": "13019.1",
+            "z": "10552.61"
+          },
+          {
+            "x": "12053.54",
+            "z": "9770.11"
+          },
+          {
+            "x": "3039.97",
+            "z": "13774.49"
+          },
+          {
+            "x": "4163.89",
+            "z": "11764.08"
+          },
+          {
+            "x": "12004.95",
+            "z": "14809.27"
+          },
+          {
+            "x": "12111.97",
+            "z": "13604.23"
+          }
+        ]
+
+        npcJudgeLocations.forEach(npcJudgeLocation => {
+          const inCircle = check_a_point(parseFloat(npcJudgeLocation.x), parseFloat(npcJudgeLocation.z), parseFloat(x), parseFloat(y), 50)
+          if (inCircle && player && x && y && player !== 'Unknown/Dead Entity' && (`${sid}` === `7039821`)) {
+            const channelJudges = client.channels.cache.find(channel => `${channel.id}` === `785334488229478431`)
+            // const info = JSON.stringify(event, null, 2)
+            if (!whitelist[`${player}`]) {
+              channelJudges.send(`<@&783137187403268147> **EPD ALERT**: \`${player}\` approaching __NPC JUDGE__ <https://dayz.ginfo.gg/#location=${x};${y}> \`\`\`${event.original}\`\`\``)
+            }
+          }
+        })
+
+      } catch (e) {
+        console.log('could not determine if in circle, judges')
+      }
+    }
+  })
+
+  lineObjects = lineObjects.filter(line => line.length > 0)
     .map(line => {
       let match = null
       let lineTypes = [
@@ -293,20 +523,20 @@ const parseServerLog = async (sid, user, serverLog, ftpPath, /** actually newest
       brainshot,
       dead
     }) => {
-      console.log('lines>', {
-        line,
-        fromMeters,
-        time,
-        player,
-        byPlayer,
-        type,
-        forDamage,
-        coords,
-        weapon,
-        headshot,
-        brainshot,
-        dead
-      })
+      // console.log('lines>', {
+      //   line,
+      //   fromMeters,
+      //   time,
+      //   player,
+      //   byPlayer,
+      //   type,
+      //   forDamage,
+      //   coords,
+      //   weapon,
+      //   headshot,
+      //   brainshot,
+      //   dead
+      // })
       switch (type) {
 
         case `is connected`: return await a.then(async r => {
@@ -368,7 +598,7 @@ const parseServerLog = async (sid, user, serverLog, ftpPath, /** actually newest
                   where pid = $1 and sid = $2 returning *
               `
               const psparameters = [pid, sid, forDamage, fromMeters, (headshot !== null) ? 1 : 0, (brainshot !== null) ? 1 : 0]
-              console.log(psparameters)
+              // console.log(psparameters)
               const psresult = await db.query(psquery, psparameters)
             } catch (e) {
               console.log('could not update stats', e, line)
@@ -405,17 +635,17 @@ const parseServerLog = async (sid, user, serverLog, ftpPath, /** actually newest
               const psparameters1 = [pid1, sid]
               const psresult1 = await db.query(psquery1, psparameters1)
 
-              console.log('should kill feed?', shouldKillfeed)
+              // console.log('should kill feed?', shouldKillfeed)
 
-              if (shouldKillfeed) {
-                // killfeed
-                const experimental = client.channels.cache.find(channel => `${channel.id}` === `${schannel}`)
-                let feed = `__${byPlayer}__ killed _${player}_ with ${weapon}`
-                feed = ((fromMeters === `0`) || (fromMeters === `0.0`) || (fromMeters === 0) || (fromMeters === 0.0)) ? feed : `${feed} from ${fromMeters} meters`
-                feed = `${feed}.`
-                console.log('feed', feed)
-                experimental.send(feed)
-              }
+              // if (shouldKillfeed) {
+              //   // killfeed
+              //   const experimental = client.channels.cache.find(channel => `${channel.id}` === `${schannel}`)
+              //   let feed = `__${byPlayer}__ killed _${player}_ with ${weapon}`
+              //   feed = ((fromMeters === `0`) || (fromMeters === `0.0`) || (fromMeters === 0) || (fromMeters === 0.0)) ? feed : `${feed} from ${fromMeters} meters`
+              //   feed = `${feed}.`
+              //   console.log('feed', feed)
+              //   experimental.send(feed)
+              // }
 
             } catch (e) {
               console.log('could not update stats', e, line)
@@ -581,10 +811,10 @@ const initLiveKillFeed = async (sid, user, schannel, sportlist) => {
       }, authBearer)
     })
     const { data } = singleUseUrlResponse
-    console.log('singleUseUrlResponse', data)
+    // console.log('singleUseUrlResponse', data)
     const { token: _token } = data
     const { url: serverLogUrl, token } = _token
-    console.log('url', serverLogUrl)
+    // console.log('url', serverLogUrl)
     // if serverLogUrl && token
     // fetch seek of file
     if (!serverLogUrl || !token) {
@@ -647,49 +877,49 @@ client.once('ready', async () => {
 
 client.on('message', async message => {
   console.log(`bot recieved message`, message.channel.id, message.content, message.guild)
-  if (message.content.substring(0,5) === 'claim') {
-    const pid = message.content.substring(6,message.content.length)
-    const pdid = message.author.id
-    const { username } = message.author
-    const sql = `update players set pdid = $1 where pid = $2 returning *`
-    const query = await db.query(sql, [pdid, pid])
-    if (query.rows.length > 0) {
-      const { pname } = query.rows.reduce((a,c) => c, {})
-      message.reply(`Survivor _${pname}_ is now linked to your discord user _${username}_.`)
-    } else {
-      message.reply('Unable to claim. Note: The ID is case sensitive.')
-    }
-  }
-  if (message.content.substring(0,9) === '!archaeon') {
-    if (message.content.substring(10,18) === 'factions') {
-      if (message.content.substring(19,25) === 'create') {
-        const factionName = message.content.substring(25,message.content.length)
-        const sql = `insert into factions (fname, pid) values ($1, $2) return *`
-        const query = await db.query(sql, [factionName, pid])
-      } else {
-        const sidSql = `select sid from guilds where gid = $1`
-        const sidQuery = await db.query(sidSql, [message.guild.id])
-        if (sidQuery.rows.length > 0) {
-          const factionsSql = `select f.fname from factions f, factionsservers fs where f.id = fs.fid and fs.sid = $1`
-          const factionsQuery = await db.query(factionsSql, [sid])
-          if (factionsQuery.rows.length > 0) {
-            console.log('>>>>>>>', factionsQuery.rows)
-            const factions = factionsQuery.rows
-              .map(row => `${row.fname}`)
-              .reduce((a,c) => {
-                console.log('reducing', `${a}${c}\n`)
-                return `${a}${c}\n`
-              }, ``)
-            message.channel.send(`There are ${factionsQuery.rows.length} factions.\n\`\`\`\n${factions}\`\`\``)
-          } else {
-            message.channel.send('There does not appear to be anyone online.')
-          }
-        } else {
-          message.channel.send('There does not appear to be any factions.')
-        }
-      }
-    }
-  }
+  // if (message.content.substring(0,5) === 'claim') {
+  //   const pid = message.content.substring(6,message.content.length)
+  //   const pdid = message.author.id
+  //   const { username } = message.author
+  //   const sql = `update players set pdid = $1 where pid = $2 returning *`
+  //   const query = await db.query(sql, [pdid, pid])
+  //   if (query.rows.length > 0) {
+  //     const { pname } = query.rows.reduce((a,c) => c, {})
+  //     message.reply(`Survivor _${pname}_ is now linked to your discord user _${username}_.`)
+  //   } else {
+  //     message.reply('Unable to claim. Note: The ID is case sensitive.')
+  //   }
+  // }
+  // if (message.content.substring(0,9) === '!archaeon') {
+  //   if (message.content.substring(10,18) === 'factions') {
+  //     if (message.content.substring(19,25) === 'create') {
+  //       const factionName = message.content.substring(25,message.content.length)
+  //       const sql = `insert into factions (fname, pid) values ($1, $2) return *`
+  //       const query = await db.query(sql, [factionName, pid])
+  //     } else {
+  //       const sidSql = `select sid from guilds where gid = $1`
+  //       const sidQuery = await db.query(sidSql, [message.guild.id])
+  //       if (sidQuery.rows.length > 0) {
+  //         const factionsSql = `select f.fname from factions f, factionsservers fs where f.id = fs.fid and fs.sid = $1`
+  //         const factionsQuery = await db.query(factionsSql, [sid])
+  //         if (factionsQuery.rows.length > 0) {
+  //           console.log('>>>>>>>', factionsQuery.rows)
+  //           const factions = factionsQuery.rows
+  //             .map(row => `${row.fname}`)
+  //             .reduce((a,c) => {
+  //               console.log('reducing', `${a}${c}\n`)
+  //               return `${a}${c}\n`
+  //             }, ``)
+  //           message.channel.send(`There are ${factionsQuery.rows.length} factions.\n\`\`\`\n${factions}\`\`\``)
+  //         } else {
+  //           message.channel.send('There does not appear to be anyone online.')
+  //         }
+  //       } else {
+  //         message.channel.send('There does not appear to be any factions.')
+  //       }
+  //     }
+  //   }
+  // }
   if (message.content.substring(0,8) === '!rooster') {
     if (message.content.substring(0,13) === '!rooster help') {
       message.channel.send(`usage: !rooster <rank,leaderboard,online> [<args>] \n\te.g., try '!rooster rank help' to see how to use the rank command`)
@@ -1509,6 +1739,32 @@ client.on('message', async message => {
       }
     }
   }
+  if (message.content.substring(0,10) === '!whitelist') {
+    if (message.content.substring(11, 14) === 'add') {
+      const targetPlayerName = message.content.substring(15, message.content.length)
+      whitelist[`${targetPlayerName}`] = 1
+      fs.writeFileSync(whitelistDb, JSON.stringify(whitelist))
+      if (whitelist[`${targetPlayerName}`]) {
+        message.channel.send(`Added \`${targetPlayerName}\``)
+      } else {
+        message.channel.send(`Could not add \`${targetPlayerName}\``)
+      }
+    } else if (message.content.substring(11, 17) === 'remove') {
+      const targetPlayerName = message.content.substring(18, message.content.length)
+      delete whitelist[`${targetPlayerName}`]
+      fs.writeFileSync(whitelistDb, JSON.stringify(whitelist))
+      if (!whitelist[`${targetPlayerName}`]) {
+        message.channel.send(`Removed \`${targetPlayerName}\``)
+      } else {
+        message.channel.send(`Could not remove \`${targetPlayerName}\``)
+      }
+    } else if (message.content.substring(11, 15) === 'list') {
+      message.channel.send(`\`\`\`${JSON.stringify(Object.keys(whitelist), null, 2)}\`\`\``)
+    }
+  }
+  // if (message.content.substring(0,13) === '!jurisdiction') {
+
+  // }
 })
 
 client.login(`Njk5MDMxMTM4ODAyNTk3OTE4.XpOdeg.xLNUSlSBr8AqI8lyZCmh_mhx4lY`)
@@ -1772,7 +2028,7 @@ app.use(session({
   resave: true,
   saveUninitialized: true
 }))
-app.use(cors({ credentials: true, origin: `http://localhost:8080` }))
+app.use(cors({ credentials: true, origin: `http://10.0.0.55:8010` }))
 app.use(morgan('tiny'))
 app.use(passport.initialize())
 app.use(passport.session())
@@ -2092,3 +2348,4 @@ app.post('/api/v2/confirm-email/:key', db.connected(), async (req, res) => {
 
 // web app serverp
 app.listen(port, () => console.log(`Example app listening at http://localhost:${port}`))
+// https.createServer(sslOptions, app).listen(9001)

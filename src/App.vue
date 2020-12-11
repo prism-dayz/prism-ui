@@ -421,9 +421,9 @@
           <!-- STATS -->
           <div style="display:flex;flex-drection:row;margin-bottom:10px;justify-content:space-evenly;">
 
-            <div style="overflow-y:scroll;padding:5px;border:1px solid #999;border-radius: 3px;width:250px;"
+            <div style="overflow-y:scroll;padding:5px;border:1px solid #999;border-radius: 3px;width:250px;border-radius:5px solid red;"
               :style="{
-                'height': `${(windowHeight/2)-60}px`
+                'height': `${(windowHeight/2)-100}px`
               }"
               >
               <div style="font-weight:bold;color:orange;">kills</div>
@@ -437,7 +437,7 @@
 
             <div style="overflow-y:scroll;padding:5px;border:1px solid #999;border-radius: 3px;width:250px;"
               :style="{
-                'height': `${(windowHeight/2)-60}px`
+                'height': `${(windowHeight/2)-100}px`
               }"
               >
               <div style="font-weight:bold;color:orange;">deaths</div>
@@ -451,7 +451,7 @@
 
             <div style="overflow-y:scroll;padding:5px;border:1px solid #999;border-radius: 3px;width:250px;"
               :style="{
-                'height': `${(windowHeight/2)-60}px`
+                'height': `${(windowHeight/2)-100}px`
               }"
               >
               <div style="font-weight:bold;color:orange;">k/d</div>
@@ -465,7 +465,7 @@
 
             <div style="overflow-y:scroll;padding:5px;border:1px solid #999;border-radius: 3px;width:250px;"
               :style="{
-                'height': `${(windowHeight/2)-60}px`
+                'height': `${(windowHeight/2)-100}px`
               }"
               >
               <div style="font-weight:bold;color:orange;">damage</div>
@@ -479,7 +479,7 @@
 
             <div style="overflow-y:scroll;padding:5px;border:1px solid #999;border-radius: 3px;width:250px;"
               :style="{
-                'height': `${(windowHeight/2)-60}px`
+                'height': `${(windowHeight/2)-100}px`
               }"
               >
               <div style="font-weight:bold;color:orange;">meters</div>
@@ -555,6 +555,12 @@ export default {
   },
   data () {
     return {
+      damageHash: {},
+      metersHash: {},
+      killsHash: {},
+      deathsHash: {},
+      statusHash: {},
+      kdsHash: {},
       timeSinceLastUpdate: 0,
       softDeployingTimeout: false,
       softDeploying: false,
@@ -692,8 +698,26 @@ export default {
     this.initOpenFiles()
     this.initResizeObserver()
     await readyiZurvive(this.$data)
-    // readyLivonia()
-    readyChernarus()
+    const livonia = window.location.search && window.location.search.match(/livonia/g) ? true : false
+    if (livonia) {
+      readyLivonia()
+      window.archaeonScalingParams = {
+        "kx": 0.00031945948468785357,
+        "ky": 0.00031945948468792187,
+        "dx": 6399.609303461327,
+        "dy": 6401.172089614661,
+        "switchedCoords": false
+      }
+    } else {
+      readyChernarus()
+      window.archaeonScalingParams = {
+        kx: 0.00039746552365541434,
+        ky: 0.00039747543741573465,
+        dx: 7961.677966525134,
+        dy: 7961.958744725942,
+        switchedCoords: false
+      }
+    }
     await getIZurvive()
   },
   computed: {
@@ -791,19 +815,17 @@ export default {
       }
     },
     parseServerLogFromString (serverLogString) {
-      // this.playerStats.markers.forEach(m => {
-      //   // iZurvive._map.removeLayer(m)
-      //   // console.log(m)
-      // })
-      // console.log('FUCK YOU', this.playerPositionsHash)
+
       Object.keys(this.playerPositionsHash)
         .forEach(key => {
           iZurvive._map.removeLayer(this.playerPositionsHash[key].marker)
           iZurvive._map.removeLayer(this.playerPositionsHash[key].label)
         })
-      // this.playerStats.markers = []
+
       this.playerPositionsHash = {}
+
       const split = serverLogString.split('\n')
+
       const transform = split
         .filter(line => line.length > 0)
         .map(line => {
@@ -814,7 +836,7 @@ export default {
             // 'hit by Player',
             // 'hit by Infected',
             // 'hit by FallDamage',
-            'killed by Player',
+            // 'killed by Player',
             '##### PlayerList',
             'built',
             'placed',
@@ -831,9 +853,9 @@ export default {
           }).reduce((a,b) => b, ``)
           // console.log(type)
 
-          match = line.match(/\|\sPlayer\s\"[a0-z9\s\/-]*\"/g)
+          match = line.match(/Player\s[\"|\'][a0-z9\s\/\-\_]*[\"|\']/g)
           const player = match ? match[0].split('"')[1] : 'ParseWarning'
-          match = line.match(/by\sPlayer\s\"[a0-z9\s\/-]*\"/g)
+          match = line.match(/by\sPlayer\s[\"|\'][a0-z9\s\/\-\_]*[\"|\']/g)
           const byPlayer = type === 'hit by Infected' ? 'Infected' : (match ? match[0].split('"')[1] : 'ParseWarning')
           match = null
 
@@ -892,19 +914,9 @@ export default {
         .filter(line => line.player !== 'Unknown/Dead Entity')
         .filter(line => line.byPlayer !== 'Unknown/Dead Entity')
       
-      // .filter(pc => pc.player.match(/sundaysatan/g))
       transform
-        // .filter(pc => pc.player.match(/sundaysatan/g))
-        // .filter(pc => {
-          // console.log(pc, pc.coords, pc.coords.x && pc.coords.y)
-        //   return pc.coords.x && pc.coords.y
-        // })
         .forEach(pc => {
-
-          // console.log(pc)
-          // console.log(pc.type === '##### PlayerList', pc.type)
           if (pc.type === '##### PlayerList') {
-            // console.log('pl')
             Object.keys(this.playerPositionsHash)
               .forEach(key => {
                 iZurvive._map.removeLayer(this.playerPositionsHash[key].marker)
@@ -923,7 +935,7 @@ export default {
               // case 'hit by Player': fillColor = 'orange'; break;
               // case 'hit by Infected': fillColor = 'green'; break;
               // case 'hit by FallDamage': fillColor = 'yellow'; break;
-              case 'killed by Player': fillColor = 'red'; break;
+              // case 'killed by Player': fillColor = 'red'; break;
               case 'built': fillColor = 'brown'; break;
               case 'placed': fillColor = 'purple'; break;
               case 'killed by': fillColor = 'red'; break;
@@ -943,13 +955,7 @@ export default {
               const latlng = L.LocUtil.locToCoords({
                 loc1: x,
                 loc2: y
-              }, {
-                kx: 0.00039746552365541434,
-                ky: 0.00039747543741573465,
-                dx: 7961.677966525134,
-                dy: 7961.958744725942,
-                switchedCoords: false
-              })
+              }, window.archaeonScalingParams)
 
               const icon = L.divIcon({
                 html: `<div style="width:${pc.player.length * 7.33}px;font-family:monospace;">${pc.player}</div>`
@@ -1014,13 +1020,7 @@ export default {
               const latlng = L.LocUtil.locToCoords({
                 loc1: x,
                 loc2: y
-              }, {
-                kx: 0.00039746552365541434,
-                ky: 0.00039747543741573465,
-                dx: 7961.677966525134,
-                dy: 7961.958744725942,
-                switchedCoords: false
-              })
+              }, window.archaeonScalingParams)
 
               const marker = L
                 .circleMarker([latlng.lat, latlng.lng], options)
@@ -1041,12 +1041,12 @@ export default {
 
         })
 
-      const damageHash = {}
-      const metersHash = {}
-      const killsHash = {}
-      const deathsHash = {}
-      const statusHash = {}
-      const kdsHash = {}
+      const damageHash = this.damageHash
+      const metersHash = this.metersHash
+      const killsHash = this.killsHash
+      const deathsHash = this.deathsHash
+      const statusHash = this.statusHash
+      const kdsHash = this.kdsHash
 
       transform
         .forEach(line => {
@@ -1077,10 +1077,12 @@ export default {
       transform
         .filter(line => line.byPlayer !== 'Unknown')
         .filter(line => {
-          return line.type === 'killed by Player'
+          console.log('line.type', line.type, line)
+          return line.type === 'killed by'
         })
         // A killed by Player B
         .forEach(line => {
+          console.log('line', line, killsHash)
           killsHash[`${line.byPlayer}`] = killsHash[`${line.byPlayer}`] !== undefined ? killsHash[`${line.byPlayer}`] + 1 : 1
           deathsHash[`${line.player}`] = deathsHash[`${line.player}`] !== undefined ? deathsHash[`${line.player}`] + 1 : 1
         })
@@ -1340,13 +1342,13 @@ export default {
               const filePath = gameserver.game_specific.path
 
               this.$buefy.snackbar.open({
-                  message: `Parsing ${logFile.split('/')[1]} ${whatthefuck}/${logs.length} logs.`,
-                  type: 'is-warning',
-                  position: 'is-top-left',
-                  actionText: 'OK',
-                  indefinite: false,
-                  queue: false,
-                  duration: 15000
+                message: `Parsing ${logFile.split('/')[1]} ${whatthefuck}/${logs.length} logs.`,
+                type: 'is-warning',
+                position: 'is-top-left',
+                actionText: 'OK',
+                indefinite: false,
+                queue: false,
+                duration: 15000
               })
 
               whatthefuck++
@@ -1355,34 +1357,34 @@ export default {
               const path = `/services/${sid}/gameservers/file_server/download?file=${file}`
               const response = await this.nitradoApiRequest(method, path)
                 .then(response => response.json())
-              console.log('log', file, response)
               
               if (response && response.data && response.data.token && response.data.token.url) {
                 const url = response.data.token.url
-                console.log('url', url)
                 const method1 = 'GET'
                 const path1 = url
                 const response1 = await fetch(path1, { method: method1 })
                   .then(response => response.body)
                 const readableStream = response1
-                console.log('response1', response1)
                 const ts = new TransformStream(new Uint8ArrayToStringsTransformer())
                 const reader = readableStream.pipeThrough(ts).getReader()
                 let i = 0, accumulator = ``
                 while (true) {
-                    const { done, value } = await reader.read()
-                    if (value) {
-                      accumulator = `${accumulator}${value}\n`
-                    }
-                    if (done) break
+                  const { done, value } = await reader.read()
+                  if (value) {
+                    accumulator = `${accumulator}${value}\n`
+                  }
+                  if (done) break
                 }
-
+                // const serverLogFilter = accumulator.split('\n').filter(line => line.match(/PURGE/g)).join('\n')
+                const serverLogFilter = accumulator
+                this.serverLog = `${this.serverLog}${serverLogFilter}`
                 await this.parseServerLogFromString(accumulator)
               }
 
               return Promise.resolve()
 
             }), Promise.resolve())
+
             this.$buefy.snackbar.open({
                 message: `Map is synced!`,
                 type: 'is-success',
@@ -1392,15 +1394,25 @@ export default {
                 queue: false,
                 duration: 15000
             })
+
             this.playerStats.timer = 150
+
             this.playerStats.timeout = setTimeout(() => {
               this.playerStats.markers.forEach(m => {
                 iZurvive._map.removeLayer(m)
               })
               this.playerStats.markers = []
+              this.damageHash = {}
+              this.metersHash = {}
+              this.killsHash = {}
+              this.deathsHash = {}
+              this.statusHash = {}
+              this.kdsHash = {}
               this.onTurnOnPlayerStats(true)
             }, 150000)
+
             clearInterval(this.playerStats.timeoutTimer)
+
             this.playerStats.timeoutTimer = setInterval(() => {
               this.playerStats.timer--
               this.timeSinceLastUpdate++
@@ -1415,7 +1427,9 @@ export default {
                 })
               }
             }, 1000)
+
             this.playerStats.busy = false
+
           }
         } catch (e) {
           console.log(e)

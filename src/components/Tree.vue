@@ -71,13 +71,7 @@ export default {
           const latLng = L.LocUtil.locToCoords({
             loc1: childNode.getAttribute('x'),
             loc2: childNode.getAttribute('z')
-          }, {
-            kx: 0.00039746552365541434,
-            ky: 0.00039747543741573465,
-            dx: 7961.677966525134,
-            dy: 7961.958744725942,
-            switchedCoords: false
-          })
+          }, window.archaeonScalingParams)
           const circle = L.circle(latLng, {
             color: 'cyan',
             fillColor: fillColor,
@@ -100,13 +94,7 @@ export default {
             window.iZurvive._map.dragging.disable()
             window.iZurvive._map.on('mousemove', (e) => {
               circle.setLatLng(e.latlng)
-              const yX = L.LocUtil.coordsToYx(e.latlng, {
-                kx: 0.00039746552365541434,
-                ky: 0.00039747543741573465,
-                dx: 7961.677966525134,
-                dy: 7961.958744725942,
-                switchedCoords: false
-              })
+              const yX = L.LocUtil.coordsToYx(e.latlng, window.archaeonScalingParams)
               const x = Math.floor((yX.loc1) * 100) / 100
               const y = Math.floor((yX.loc2) * 100) / 100
               const doSet = (node, attributeName, attributeValue) => {

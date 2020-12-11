@@ -11726,7 +11726,7 @@ const izurviveDeps = (vue) => {
                     } : null
                 },
                 _onMouseMove: function(e) {
-                    var i, n = L.LocUtil.coordsToYx(e.latlng, this.options.scalingParams);
+                    var i, n = L.LocUtil.coordsToYx(e.latlng, window.archaeonScalingParams);
                     i = "function" == typeof this.options.coordFormatFunction ? this.options.coordFormatFunction(n) : n.loc1.toFixed(2) + " / " + n.loc2.toFixed(2), t(this.options.locationOverlayContentSelector).text(i)
                     // HERE
                     // HERE
@@ -11768,7 +11768,7 @@ const izurviveDeps = (vue) => {
                     window.dayzTracker = {
                         ...window.dayzTracker || {},
                         options: {
-                            scalingParams: this.options.scalingParams
+                            scalingParams: window.archaeonScalingParams
                         },
                         lastMove
                     }
