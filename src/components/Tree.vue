@@ -72,7 +72,7 @@ export default {
             loc1: childNode.getAttribute('x'),
             loc2: childNode.getAttribute('z')
           }, window.archaeonScalingParams)
-          const circle = L.circle(latLng, {
+          const circle = L.circle(latLng, window.ARCHAEON_CIRCLE_OPTIONS || {
             color: 'cyan',
             fillColor: fillColor,
             opacity: 1.0,

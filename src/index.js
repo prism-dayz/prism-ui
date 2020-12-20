@@ -31,7 +31,12 @@ const { createCanvas, loadImage } = require('canvas')
 
 const whitelistDb = './src/whitelist.hash'
 const whitelistDbBuffer = fs.readFileSync(whitelistDb)
-const whitelist = JSON.parse(whitelistDbBuffer.toString())
+const whitelistHash = JSON.parse(whitelistDbBuffer.toString())
+
+const safezoneDb = './src/safezone.hash'
+const safezoneDbBuffer = fs.readFileSync(safezoneDb)
+const safezoneHash = JSON.parse(safezoneDbBuffer.toString())
+const THREE_HOURS = 3 * 3.6e+6
 
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -299,6 +304,7 @@ const parseServerLog = async (sid, user, serverLog, ftpPath, /** actually newest
     if (shouldKillfeed) {
       // killfeed
       const experimental = client.channels.cache.find(channel => `${channel.id}` === `${schannel}`)
+
       if (event.killed) {
         if (event.pve) {
           if (event.players[0] !== `Unknown/Dead Entity`) {
@@ -345,6 +351,7 @@ const parseServerLog = async (sid, user, serverLog, ftpPath, /** actually newest
       } else if (event.disconnected) {
         // experimental.send(`\`${event.players[0]}\` disconnected`)
       }
+
       function check_a_point(a, b, x, y, r) {
           var dist_points = (a - x) * (a - x) + (b - y) * (b - y);
           r *= r;
@@ -353,6 +360,7 @@ const parseServerLog = async (sid, user, serverLog, ftpPath, /** actually newest
           }
           return false;
       }
+
       // for trader
       try {
         const { coords, players } = event
@@ -362,14 +370,19 @@ const parseServerLog = async (sid, user, serverLog, ftpPath, /** actually newest
         const inCircle = check_a_point(12102.81, 12477.11, parseFloat(x), parseFloat(y), 600)
         if (inCircle && player && x && y && player !== 'Unknown/Dead Entity' && (`${sid}` === `7039821`)) {
           const channelJudges = client.channels.cache.find(channel => `${channel.id}` === `785334488229478431`)
-          // const info = JSON.stringify(event, null, 2)
-          if (!whitelist[`${player}`]) {
-            channelJudges.send(`**EPD ALERT**: \`${player}\` at __NEAF Trader Safe Zone__ <https://dayz.ginfo.gg/#location=${x};${y}> \`\`\`${event.original}\`\`\``)
+          if (!whitelistHash[`${player}`]) {
+            if (!safezoneHash[`${player}`]) {
+              channelJudges.send(`⛔ **EPD TRESPASS**: \`${player}\` at __NEAF Trader Safe Zone__ <https://dayz.ginfo.gg/#location=${x};${y}> \`\`\`${event.original}\`\`\``)
+            }
+            if (safezoneHash[`${player}`]) {
+              channelJudges.send(`✅ **EPD AUTHORIZED**: \`${player}\` at __NEAF Trader Safe Zone__ <https://dayz.ginfo.gg/#location=${x};${y}> \`\`\`${event.original}\`\`\``)
+            }
           }
         }
       } catch (e) {
         console.log('could not determine if in circle, trader')
       }
+
       // for npc judges
       try {
         const { coords, players } = event
@@ -423,8 +436,7 @@ const parseServerLog = async (sid, user, serverLog, ftpPath, /** actually newest
           const inCircle = check_a_point(parseFloat(npcJudgeLocation.x), parseFloat(npcJudgeLocation.z), parseFloat(x), parseFloat(y), 50)
           if (inCircle && player && x && y && player !== 'Unknown/Dead Entity' && (`${sid}` === `7039821`)) {
             const channelJudges = client.channels.cache.find(channel => `${channel.id}` === `785334488229478431`)
-            // const info = JSON.stringify(event, null, 2)
-            if (!whitelist[`${player}`]) {
+            if (!whitelistHash[`${player}`]) {
               channelJudges.send(`<@&783137187403268147> **EPD ALERT**: \`${player}\` approaching __NPC JUDGE__ <https://dayz.ginfo.gg/#location=${x};${y}> \`\`\`${event.original}\`\`\``)
             }
           }
@@ -852,6 +864,9 @@ const discordClient = new DiscordClient()
 const client = discordClient
 const prefix = '!'
 
+// rooster
+client.login(`Njk5MDMxMTM4ODAyNTk3OTE4.XpOdeg.xLNUSlSBr8AqI8lyZCmh_mhx4lY`)
+
 // killfeed bot
 client.once('ready', async () => {
   // client.guilds.cache.find(guild => console.log(guild))
@@ -873,6 +888,30 @@ client.once('ready', async () => {
       client.user.setActivity(status, { type: 'WATCHING' })
     })
   }, 1000 * 30)
+})
+
+// safezone interval
+client.once('ready', async () => {
+  const channel = client.channels.cache
+    .find(channel => `${channel.id}` === `785334488229478431`)
+  setInterval(() => {
+    Object
+      .keys(safezoneHash)
+      .filter((key) => {
+        const timeRemaining = ((new Date().getTime() - safezoneHash[key].expires)/60000).toFixed(0) * -1
+        return timeRemaining <= 0
+      })
+      .forEach((key) => {
+        const id = `${safezoneHash[key].id}`
+        delete safezoneHash[key]
+        fs.writeFileSync(safezoneDb, JSON.stringify(safezoneHash))
+        if (!safezoneHash[key]) {
+          channel.send(`<@${id}> Safezone access **expired** for \`${key}\`, removed from list`)
+        } else {
+          channel.send(`<@${id}> Safezone access **expired** for \`${key}\` for <@${id}>, but could not remove from list`)
+        }
+      })
+  }, 60000)
 })
 
 client.on('message', async message => {
@@ -1739,35 +1778,102 @@ client.on('message', async message => {
       }
     }
   }
-  if (message.content.substring(0,10) === '!whitelist') {
-    if (message.content.substring(11, 14) === 'add') {
-      const targetPlayerName = message.content.substring(15, message.content.length)
-      whitelist[`${targetPlayerName}`] = 1
-      fs.writeFileSync(whitelistDb, JSON.stringify(whitelist))
-      if (whitelist[`${targetPlayerName}`]) {
-        message.channel.send(`Added \`${targetPlayerName}\``)
-      } else {
-        message.channel.send(`Could not add \`${targetPlayerName}\``)
-      }
-    } else if (message.content.substring(11, 17) === 'remove') {
-      const targetPlayerName = message.content.substring(18, message.content.length)
-      delete whitelist[`${targetPlayerName}`]
-      fs.writeFileSync(whitelistDb, JSON.stringify(whitelist))
-      if (!whitelist[`${targetPlayerName}`]) {
-        message.channel.send(`Removed \`${targetPlayerName}\``)
-      } else {
-        message.channel.send(`Could not remove \`${targetPlayerName}\``)
-      }
-    } else if (message.content.substring(11, 15) === 'list') {
-      message.channel.send(`\`\`\`${JSON.stringify(Object.keys(whitelist), null, 2)}\`\`\``)
-    }
-  }
   // if (message.content.substring(0,13) === '!jurisdiction') {
 
   // }
 })
 
-client.login(`Njk5MDMxMTM4ODAyNTk3OTE4.XpOdeg.xLNUSlSBr8AqI8lyZCmh_mhx4lY`)
+// safezone handler
+client.on('message', async (message) => {
+  const { content, author } = message
+  const { id } = author
+  const safezone = `!safezone `
+  const add = `add `
+  const remove = `remove `
+  const list = `list`
+
+  if (content.substring(0,safezone.length) === safezone) {
+
+    if (content.substring(safezone.length, safezone.length + add.length) === add) {
+      const targetPlayerName = message.content.substring(safezone.length + add.length, content.length)
+      const expires = new Date().getTime() + THREE_HOURS
+      safezoneHash[`${targetPlayerName}`] = {
+        expires,
+        id
+      }
+      fs.writeFileSync(safezoneDb, JSON.stringify(safezoneHash))
+      if (safezoneHash[`${targetPlayerName}`]) {
+        message.channel.send(`Citizen \`${targetPlayerName}\` authorized by <@${id}> for 3 hours`)
+      } else {
+        message.channel.send(`Could not add \`${targetPlayerName}\` <@${id}>`)
+      }
+    } else if (content.substring(safezone.length, safezone.length + remove.length) === remove) {
+      const targetPlayerName = message.content.substring(safezone.length + remove.length, content.length)
+      delete safezoneHash[`${targetPlayerName}`]
+      fs.writeFileSync(safezoneDb, JSON.stringify(safezoneHash))
+      if (!safezoneHash[`${targetPlayerName}`]) {
+        message.channel.send(`Removed \`${targetPlayerName}\` <@${id}>`)
+      } else {
+        message.channel.send(`Could not remove \`${targetPlayerName}\` <@${id}>`)
+      }
+    } else if (content.substring(safezone.length, safezone.length + list.length) === list) {
+      if (Object.keys(safezoneHash).length > 0) {
+        Object
+          .keys(safezoneHash)
+          .forEach(key => message.channel
+            .send(`\`${key}\` authorized by <@${safezoneHash[key].id}> expires in ${((new Date().getTime() - safezoneHash[key].expires)/60000).toFixed(0) * -1} minutes`))
+      } else {
+        message.channel.send(`Zero authorized access`)
+      }
+    }
+
+  }
+
+})
+
+// judges handler
+client.on('message', async (message) => {
+  const { content, author } = message
+  const { id } = author
+  const judges = `!judges `
+  const add = `add `
+  const remove = `remove `
+  const list = `list`
+
+  if (content.substring(0,judges.length) === judges) {
+
+    if (content.substring(judges.length, judges.length + add.length) === add) {
+      const targetPlayerName = message.content.substring(judges.length + add.length, content.length)
+      whitelistHash[`${targetPlayerName}`] = id
+      fs.writeFileSync(whitelistDb, JSON.stringify(whitelistHash))
+      if (whitelistHash[`${targetPlayerName}`]) {
+        message.channel.send(`Judge \`${targetPlayerName}\` authorized by <@${id}>`)
+      } else {
+        message.channel.send(`Could not add \`${targetPlayerName}\` <@${id}>`)
+      }
+    } else if (content.substring(judges.length, judges.length + remove.length) === remove) {
+      const targetPlayerName = message.content.substring(judges.length + remove.length, content.length)
+      delete whitelistHash[`${targetPlayerName}`]
+      fs.writeFileSync(whitelistDb, JSON.stringify(whitelistHash))
+      if (!whitelistHash[`${targetPlayerName}`]) {
+        message.channel.send(`Removed \`${targetPlayerName}\` <@${id}>`)
+      } else {
+        message.channel.send(`Could not remove \`${targetPlayerName}\` <@${id}>`)
+      }
+    } else if (content.substring(judges.length, judges.length + list.length) === list) {
+      if (Object.keys(whitelistHash).length > 0) {
+        Object
+          .keys(whitelistHash)
+          .forEach(key => message.channel
+            .send(`Judge \`${key}\` authorized by <@${whitelistHash[key]}>`))
+      } else {
+        message.channel.send(`Zero authorized access`)
+      }
+    }
+
+  }
+
+})
 
 const bailbondsClient = new DiscordClient()
 
@@ -2028,7 +2134,7 @@ app.use(session({
   resave: true,
   saveUninitialized: true
 }))
-app.use(cors({ credentials: true, origin: `http://10.0.0.55:8010` }))
+app.use(cors({ credentials: true, origin: `http://localhost:8080` }))
 app.use(morgan('tiny'))
 app.use(passport.initialize())
 app.use(passport.session())
