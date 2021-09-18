@@ -13,7 +13,16 @@
           <b-icon class="is-pulled-right" :icon="props.expanded ? 'menu-down' : 'menu-up'"></b-icon>
         </template>
 
-        <Tree :key="treeKey" :branches="[branch.xmlDoc.documentElement]" @mutate="onMutate" :freeze="freeze" />
+        <Tree
+          :key="treeKey"
+          :branches="[branch.xmlDoc.documentElement]"
+          @mutate="onMutate"
+          :freeze="freeze"
+          :circle-color="circleColor"
+          :circle-opacity="circleOpacity"
+          :circle-radius="circleRadius"
+          :circle-weight="circleWeight"
+        />
 
       </b-menu-item>
     </b-menu-list>
@@ -25,7 +34,7 @@ import Tree from '@/components/Tree'
 const parser = new DOMParser()
 export default {
   name: 'DayzXMLTree',
-  props: ['files', 'freeze', 'dirty'],
+  props: ['files', 'freeze', 'dirty', 'circleColor', 'circleOpacity', 'circleRadius', 'circleWeight'],
   components: {
     Tree
   },

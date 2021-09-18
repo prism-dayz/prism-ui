@@ -3,8 +3,13 @@ https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/TroubleshootingInstancesConn
 chmod 0400 .ssh/my_private_key.pem
 
 # mac
+
 pg_ctl -D /usr/local/var/postgres start
+createdb
+also dropdb
 archaeon=# show hba_file;
+psql -U methanogen archaeon < ~/Desktop/archaeon-2020-01-30.pg_dump
+
 use native `createdb archaeon` and then edit the hba, then the last two lines in the `create-db.sql` file, then the `init-db.sql`
 
 ```

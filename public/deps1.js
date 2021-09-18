@@ -10629,6 +10629,7 @@ const izurviveDeps = (vue) => {
                     x: (n - e.dx) / e.kx,
                     y: (o - e.dy) / e.ky
                 };
+                console.log('here', i.unproject)
                 return i.unproject(r)
             },
             coordsToYx: function(t, e) {

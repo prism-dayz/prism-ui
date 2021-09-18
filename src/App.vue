@@ -327,8 +327,39 @@
           <!-- XML EDITORS -->
           <div style="flex-grow:2">
 
-            <div v-if="fileUploadInitialized && selectedFile">
-              <DayzXMLTree ref="dayz_xml_tree" :key="selectedFile.id" :files="[selectedFile]" @evolve="onEvolve" :dirty="xmlTreeDirty" :freeze="unsavedChanges" />
+            <div style="display:flex;flex-direction:row;">
+              <div style="flex-grow:2;padding-right:10px;" v-if="fileUploadInitialized && selectedFile">
+                <DayzXMLTree
+                  ref="dayz_xml_tree"
+                  :key="selectedFile.id"
+                  :files="[selectedFile]"
+                  @evolve="onEvolve"
+                  :dirty="xmlTreeDirty"
+                  :freeze="unsavedChanges"
+                  :circle-color="circleColor.hex"
+                  :circle-opacity="circleOpacity"
+                  :circle-weight="circleWeight"
+                  :circle-radius="circleRadius"
+                />
+              </div>
+
+              <div style="" v-if="fileUploadInitialized && selectedFile">
+                <!-- {
+                  color: 'cyan',
+                  fillColor: this.fillColor,
+                  opacity: 1.0,
+                  weight: 1,
+                  fillOpacity: 1.0,
+                  radius: 1500
+                } -->
+                <CompactColorPicker 
+                  v-model="circleColor"
+                  :palette="['#4D4D4D', '#999999', '#FFFFFF', '#F44E3B', '#FE9200', '#FCDC00', '#DBDF00', '#A4DD00', '#68CCCA', '#73D8FF', '#AEA1FF', '#FDA1FF', '#333333', '#808080', '#CCCCCC', '#D33115', '#E27300', '#FCC400', '#B0BC00', '#68BC00', '#16A5A5', '#009CE0', '#7B64FF', '#FA28FF', '#000000', '#666666', '#B3B3B3', '#9F0500', '#C45100', '#FB9E00', '#808900', '#194D33', '#0C797D', '#0062B1', '#653294', '#AB149E']"
+                />
+                <b-slider v-model="circleOpacity" :custom-formatter="val => val + '%'"></b-slider>
+                <b-input v-model="circleWeight"></b-input>
+                <b-input v-model="circleRadius"></b-input>
+              </div>
             </div>
 
             <div id="archaeon-xml-editor" style="height:585px;border:1px solid 333;">
@@ -527,6 +558,8 @@ import { Buffer } from 'buffer'
 import DayzXMLTree from '@/components/DayzXMLTree'
 import XmlFormatter from 'xml-formatter'
 import moment from 'moment'
+import { Compact } from 'vue-color'
+const CompactColorPicker = Compact
 
 const getIZurvive = () => new Promise((resolve, reject) => {
     const i = setInterval(() => {
@@ -546,6 +579,7 @@ export default {
   name: 'app',
   mixins: [vueWindowSizeMixin],
   components: {
+    CompactColorPicker,
     DayzXMLTree,
     AccountModal,
     LoginButton,
@@ -555,6 +589,10 @@ export default {
   },
   data () {
     return {
+      circleWeight: 1,
+      circleRadius: 15000,
+      circleOpacity: 100,
+      circleColor: {"hsl":{"h":75.47511312217195,"s":1,"l":0.43333333333333335,"a":1},"hex":"#A4DD00","hex8":"#A4DD00FF","rgba":{"r":164,"g":221,"b":0,"a":1},"hsv":{"h":75.47511312217195,"s":1,"v":0.8666666666666667,"a":1},"oldHue":34.48818897637795,"source":"hex","a":1},
       damageHash: {},
       metersHash: {},
       killsHash: {},
@@ -729,6 +767,9 @@ export default {
     }
   },
   methods: {
+    onUpdateColorPicked (event) {
+      console.log(event)
+    },
     onEvolve () {
       this.xmlTreeDirty = true
     },
@@ -946,7 +987,7 @@ export default {
 
               options = {
                 weight: 2.5,
-                color: 'blue',
+                color: 'aqua',
                 fillColor: fillColor,
                 fillOpacity: 0.5,
                 radius: 10
@@ -956,6 +997,46 @@ export default {
                 loc1: x,
                 loc2: y
               }, window.archaeonScalingParams)
+
+              // // const html1 = `
+              // //   <div style="width:${pc.player.length * 7.33}px;">
+              // //     <svg viewBox="0 0 500 500">
+              // //       <path style="fill: transparent;" id="curve" d="M73.2,148.6c4-6.1,65.5-96.8,178.6-95.6c111.3,1.2,170.8,90.3,175.1,97" />
+              // //       <text width="500">
+              // //         <textPath xlink:href="#curve">
+              // //           ${pc.player}
+              // //         </textPath>
+              // //       </text>
+              // //     </svg>
+              // //   </div>
+              // // `
+
+              // const badge = pc.player.split('')
+              //   .map((letter, i) => {
+              //     return `
+              //       <div style="
+              //         font: 12px Monaco, MonoSpace;
+              //         height: 40px;
+              //         position: absolute;
+              //         width: 10px;
+              //         left: 0;
+              //         top: 0;
+              //         transform-origin: bottom center;
+              //         transform:rotate(${i * 12}deg);
+              //       ">${letter}</div>
+              //     `
+              //   })
+              //   .reduce((a,c) => `${a}${c}`, ``)
+
+              // const badgeContainer = `
+              //   <div style="
+              //     position: relative;
+              //     width: 400px;
+              //     border-radius: 50%;
+              //   ">
+              //     ${badge}
+              //   </div>
+              // `
 
               const icon = L.divIcon({
                 html: `<div style="width:${pc.player.length * 7.33}px;font-family:monospace;">${pc.player}</div>`
@@ -986,9 +1067,9 @@ export default {
 
               if (fillColor === 'brown') {
                 options = {
-                  weight: 1,
+                  weight: 2,
                   color: 'yellow',
-                  fillColor: fillColor,
+                  fillColor: 'lime',
                   fillOpacity: 0.5,
                   radius: 3.5
                 }
@@ -996,9 +1077,9 @@ export default {
               } else if (fillColor === 'purple') {
                 content = `${pc.player} ${pc.type} ${pc.placed} @${pc.time} and ${x}/${y}`
                 options = {
-                  weight: 1,
-                  color: 'pink',
-                  fillColor: fillColor,
+                  weight: 2,
+                  color: 'yellow',
+                  fillColor: 'lightgreen',
                   fillOpacity: 0.5,
                   radius: 3.5
                 }
@@ -1328,9 +1409,9 @@ export default {
           const sid = this.selectedService.id
           const gameserver = this.selectedServer.data.gameserver
           const { details: { portlist_short } } = this.selectedService
-          if (gameserver.game_specific.log_files.length > 0) {
+          if (gameserver.game_specific.log_files.filter(file => file.match(/ADM/)).length > 0) {
 
-            let logs = [ ...gameserver.game_specific.log_files ]
+            let logs = [ ...gameserver.game_specific.log_files.filter(file => file.match(/ADM/)) ]
 
             logs.reverse()
 
@@ -1377,7 +1458,7 @@ export default {
                 }
                 // const serverLogFilter = accumulator.split('\n').filter(line => line.match(/PURGE/g)).join('\n')
                 const serverLogFilter = accumulator
-                this.serverLog = `${this.serverLog}${serverLogFilter}`
+                this.serverLog = `${serverLogFilter}`
                 await this.parseServerLogFromString(accumulator)
               }
 
@@ -1409,7 +1490,7 @@ export default {
               this.statusHash = {}
               this.kdsHash = {}
               this.onTurnOnPlayerStats(true)
-            }, 150000)
+            }, 120000)
 
             clearInterval(this.playerStats.timeoutTimer)
 
@@ -1423,7 +1504,7 @@ export default {
                     position: 'is-top-left',
                     actionText: 'OK',
                     queue: false,
-                    duration: 60000
+                    duration: 30000
                 })
               }
             }, 1000)
@@ -1619,7 +1700,7 @@ export default {
                   }
                   if (!this.didReinstall) {
                     this.hardDeploying = false
-                    this.terminalOutput.push(`deploy> success`)
+                    this.terminalOutput.push(`deploy> success at ` + `${new Date()}`.match(/[0-9]*:[0-9]*:[0-9]*/g).join(''))
                   }
                 break;
               }
@@ -1631,7 +1712,7 @@ export default {
               const serverState = wsMessage.data
               this.terminalOutput.push(`restart> gameserver is ${serverState}`)
               if (serverState === 'started') {
-                this.terminalOutput.push(`restart> success`)
+                this.terminalOutput.push(`restart> success ` + `${new Date()}`.match(/[0-9]*:[0-9]*:[0-9]*/g).join(''))
                 this.restartingGameserver = false
               }
               if (serverState === 'stopped') {
@@ -1650,7 +1731,7 @@ export default {
               const serverState = wsMessage.data
               this.terminalOutput.push(`deploy> gameserver is ${serverState}`)
               if (serverState === 'started') {
-                this.terminalOutput.push(`deploy> success`)
+                this.terminalOutput.push(`deploy> success ` + `${new Date()}`.match(/[0-9]*:[0-9]*:[0-9]*/g).join(''))
                 this.softDeploying = false
               }
               if (serverState === 'stopped') {

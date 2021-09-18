@@ -28,6 +28,18 @@ const {
 } = require('./utils')
 const { Client: DiscordClient, MessageEmbed, MessageAttachment, RichEmbed } = require('discord.js')
 const { createCanvas, loadImage } = require('canvas')
+const FormData = require('form-data')
+
+// const {
+//   ORIGIN_HOST_NAME,
+//   ORIGIN_HOST_PORT
+// } = process.env
+
+// const ORIGIN_HOST = `${ORIGIN_HOST_NAME}${ORIGIN_HOST_PORT}`
+
+const spyDb = './src/spy.hash'
+const spyDbBuffer = fs.readFileSync(spyDb)
+const spyHash = JSON.parse(spyDbBuffer.toString())
 
 const whitelistDb = './src/whitelist.hash'
 const whitelistDbBuffer = fs.readFileSync(whitelistDb)
@@ -41,10 +53,10 @@ const THREE_HOURS = 3 * 3.6e+6
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 // ssl
-const sslOptions = {
-  key: fs.readFileSync('/Users/bgoodson/Desktop/benches/2020-06-08/archaeon/archaeon-ssl.key'),
-  cert: fs.readFileSync('/Users/bgoodson/Desktop/benches/2020-06-08/archaeon/archaeon-ssl.pem')
-}
+// const sslOptions = {
+//   key: fs.readFileSync('/Users/bgoodson/Desktop/benches/2020-06-08/archaeon/archaeon-ssl.key'),
+//   cert: fs.readFileSync('/Users/bgoodson/Desktop/benches/2020-06-08/archaeon/archaeon-ssl.pem')
+// }
 
 // helpers functions
 const authorized = () => {
@@ -104,7 +116,7 @@ const dbClient = new Client({
 const db = {
   $connected: false,
   query (query, params) {
-    console.log(query, params)
+    // console.log(query, params)
     return dbClient.query(query, params)
   },
   async connect () {
@@ -170,6 +182,18 @@ try {
 
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 
+const playerMapsHash = {}
+// let mapImage, playerImage, mapCanvas, mapCanvasCtx
+const initCanvas = async (serverId) => {
+  playerMapsHash[serverId] = {}
+  playerMapsHash[serverId].mapCanvas = createCanvas(767.5, 767.5)
+  playerMapsHash[serverId].mapCanvasCtx = playerMapsHash[serverId].mapCanvas.getContext('2d')
+  playerMapsHash[serverId].mapImage = await loadImage('./src/assets/dayz-map-small.jpeg')
+  playerMapsHash[serverId].playerImage = await loadImage('./src/assets/player-small.png')
+  return playerMapsHash[serverId]
+}
+// initCanvas()
+
 const handleStatsDownload = (url) => {
   return new Promise((resolve, reject) => {
     const method = 'GET'
@@ -213,6 +237,112 @@ const updateServerLogStore = async (sid, user, ftpPath, size) => {
     console.log(error)
     destroyLiveKillFeed(sid)
   }
+}
+
+const inSafeZone = ({a, b, x, y, r}) => {
+  let dist_points = (a - x) * (a - x) + (b - y) * (b - y)
+  r *= r
+  if (dist_points < r) {
+      return true
+  }
+  return false
+}
+
+const post = (path, form) => {
+  return new Promise((resolve, reject) => {
+    const callback = (response) => {
+      let data = ``
+      response.on('data', (chunk) => {
+        data = `${data}${chunk}`
+      })
+      response.on('end', () => {
+        resolve(data)
+      })
+    }
+    const options = {
+      method: 'POST',
+      hostname: 'api.nitrado.net',
+      path,
+      headers: {
+        Authorization: 'Bearer 6K-6uaKY9rKQ42Q6gF7Qk5UGbAKmnO_kEU7wFUyP7SDKTqsJES4FR3T4R_tx_4YL_VjED-xLRfdPlzRDramitbqzcUlMudVT6a4e',
+        ...form.getHeaders(),
+        "Content-Length": form.getLengthSync(),
+      }
+    }
+    const request = https.request(options, callback)
+    form.pipe(request)
+    request.on('error', (error) => {
+      console.error(error)
+      reject(error)
+    })
+    request.end()
+  })
+}
+
+const postBans = (sid, form) => {
+  return post(`/services/${sid}/gameservers/settings`, form)
+}
+
+const bansDb = './src/bans.hash'
+const bansDbBuffer = fs.readFileSync(bansDb)
+const bansHash = JSON.parse(bansDbBuffer.toString())
+
+const leosDb = './src/leos.hash'
+const leosDbBuffer = fs.readFileSync(leosDb)
+const leosHash = JSON.parse(leosDbBuffer.toString())
+
+const tradersDb = './src/traders.hash'
+const tradersDbBuffer = fs.readFileSync(tradersDb)
+const tradersHash = JSON.parse(tradersDbBuffer.toString())
+
+const hashes = {
+  leosHash, tradersHash
+}
+
+const saveLeos = () => {
+  console.log(leosHash)
+  fs.writeFileSync(leosDb, JSON.stringify(leosHash))
+}
+
+const saveTraders = () => {
+  console.log(tradersHash)
+  fs.writeFileSync(tradersDb, JSON.stringify(tradersHash))
+}
+
+const doBans = async () => {
+  const sid = `9315411`
+  const value = Object.keys(bansHash).join('\r\n')
+  // console.log(bansHash)
+  fs.writeFileSync(bansDb, JSON.stringify(bansHash))
+  const form = new FormData()
+  form.append('category', 'general')
+  form.append('key', 'bans')
+  form.append('value', value)
+  await postBans(sid, form)
+}
+
+const _experimentalChannel = {
+  channel: null
+}
+const getExperimentalChannel = () => {
+  return _experimentalChannel.channel
+}
+const setExperimentalChannel = (channel) => {
+  return _experimentalChannel.channel = channel
+}
+
+// return false if authorized
+const checkAuthorizedSafezone = (byWho) => {
+  return !(Object.keys(hashes)
+    .filter(hashKey => hashes[hashKey][byWho])
+    .length > 0)
+}
+
+const checkAuthorizedLEO = (byWho) => {
+  const _hashes = { leosHash }
+  return !(Object.keys(_hashes)
+    .filter(hashKey => _hashes[hashKey][byWho])
+    .length > 0)
 }
 
 const parseServerLog = async (sid, user, serverLog, ftpPath, /** actually newest size */ recentSize, startbytes = 0, shouldKillfeed = false, schannel, sportlist) => {
@@ -265,6 +395,7 @@ const parseServerLog = async (sid, user, serverLog, ftpPath, /** actually newest
       .filter(x => x !== null)
       .reduce((a,c) => c, [])
       .map(meters => meters.split(' meters').join('').split('from ').join(''))
+      .reduce((a,c) => c, 0)
     const coords = [objectLine.match(/pos=<[0-9]*.[0-9]*,\s[0-9]*.[0-9]*,\s/g)]
       .filter(x => x !== null)
       .reduce((a,c) => c, [])
@@ -274,21 +405,34 @@ const parseServerLog = async (sid, user, serverLog, ftpPath, /** actually newest
         return coords
       })
       .reduce((a,c) => c, [])
+    const damage = [objectLine.match(/for\s[0-9]*\sdamage/g)]
+      .filter(x => x !== null)
+      .reduce((a,c) => c, [])
+      .map(damage => damage.split(' damage').join('').split('for ').join(''))
+      .reduce((a,c) => c, 0)
+    const dead = [objectLine.match(/\(DEAD\)/g)]
+      .filter(x => x !== null)
+      .reduce((a,c) => c, [])
+      .reduce((a,c) => true, false)
     const suicide = objectLine.match(/suicide/g) ? true : false
+    const placed = objectLine.match(/\)\splaced\s/g) ? true : false
     const unconscious = objectLine.match(/unconscious/g) ? true : false
     const reconscious = objectLine.match(/\sconscious/g) ? true : false
     const connected = objectLine.match(/is\sconnected/g) ? true : false
     const disconnected = objectLine.match(/has\sbeen\sdisconnected/g) ? true : false
     return {
+      dead,
+      damage,
       disconnected,
       connected,
       reconscious,
       unconscious,
       suicide,
+      placed,
       coords,
-      headshot,
-      brainshot,
       melee,
+      brainshot,
+      headshot,
       meters,
       item,
       pve,
@@ -305,146 +449,345 @@ const parseServerLog = async (sid, user, serverLog, ftpPath, /** actually newest
       // killfeed
       const experimental = client.channels.cache.find(channel => `${channel.id}` === `${schannel}`)
 
-      if (event.killed) {
-        if (event.pve) {
-          if (event.players[0] !== `Unknown/Dead Entity`) {
-            experimental.send(`PvE \`${event.pve.trim()}\` **killed** \`NPC\` <https://dayz.ginfo.gg/#location=${event.coords[0]};${event.coords[1]}>`)
-          }
-        } else {
-          const prevEvent = v2Feed[eventIndex - 1] ? v2Feed[eventIndex - 1] : false
-          if (event.players[0] === `Unknown/Dead Entity`) {
-            experimental.send([
-              `PvE \`${event.players[1]}\` **killed** \`NPC\` with *${event.item}*`,
-              event.meters.length > 0 ? ` from __${event.meters}__ meters` : ``,
-              prevEvent.headshot ? ` (headshot)` : ``,
-              prevEvent.brainshot ? ` (brainshot)` : ``,
-              ` <https://dayz.ginfo.gg/#location=${event.coords[0]};${event.coords[1]}>`
-            ].join(''))
-          } else {
-            experimental.send(`\`${event.players[1]}\` **killed** \`${event.players[0]}\` with *${event.item}*${event.meters.length > 0 ? ` from __${event.meters}__ meters` : `` } <https://dayz.ginfo.gg/#location=${event.coords[0]};${event.coords[1]}>`)
+      const emitter = {
+        emit: (type, event) => {
+          switch (type) {
+
+            case 'placed:pve': 
+              if (experimental.id === '846437164648235079') {
+                const { coords } = event
+                const [x, y] = coords
+                let pvtype1 = `PvE `
+                const byWho = event.players[0]
+                if (inSafeZone({a:12142.65, b:12512.62, x:parseFloat(x), y:parseFloat(y), r:500})) {
+                  // check all authorized playertags
+                  if (checkAuthorizedSafezone(byWho)) {
+                    pvtype1 = `**ILLEGAL** ${pvtype1}SAFEZONE PLACEMENT VIOLATION `
+                    bansHash[byWho] = {
+                      until: new Date().getTime() + (60 * 60 * 24 * 1000),
+                      reason: ``
+                    }
+                  }
+                  const message1 = [
+                    `${pvtype1}\`${byWho}\` **placed** in safezone`,
+                    ` <https://dayz.ginfo.gg/#location=${event.coords[0]};${event.coords[1]}>`
+                  ].join('')
+                  if (checkAuthorizedSafezone(byWho)) {
+                    bansHash[byWho].reason = message1
+                  }
+                  return experimental.send(message1)
+                } else return null
+              }
+              return null
+
+            case 'kill:pvp':
+              let who, byWho, pvtype = ``
+              byWho = event.players[1]
+              // since we know that an Unknown/Dead Entity from a kill event is an NPC, we'll decide
+              // to relabel it as PvE, this is a prioprietary decision and thus why it's not a kill:pve event
+              if (event.players[0] === `Unknown/Dead Entity`) {
+                who = 'NPC'
+                pvtype = `PvE `
+              } else {
+                who = event.players[0]
+                pvtype = `PvP `
+              }
+              if (experimental.id === '846437164648235079') {
+                const { coords } = event
+                const [x, y] = coords
+                if (inSafeZone({a:12142.65, b:12512.62, x:parseFloat(x), y:parseFloat(y), r:500})) {
+                  if ((inSafeZone({a:12417.87, b:12395.45, x:parseFloat(x), y:parseFloat(y), r:20}))) {
+                    // legal
+                  } else {
+                    // check all authorized playertags
+                    if (pvtype === `PvE `) {
+                      if (checkAuthorizedSafezone(byWho)) {
+                        pvtype = `ILLEGAL ${pvtype}SAFEZONE VIOLATION `
+                        bansHash[byWho] = {
+                          until: new Date().getTime() + (60 * 60 * 24 * 1000),
+                          reason: ``
+                        }
+                      }
+                    } else if (pvtype = `PvP `) {
+                      if (checkAuthorizedLEO(byWho)) {
+                        pvtype = `ILLEGAL ${pvtype}SAFEZONE VIOLATION `
+                        bansHash[byWho] = {
+                          until: new Date().getTime() + (60 * 60 * 24 * 1000),
+                          reason: ``
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+              const message = [
+                `${pvtype}\`${byWho}\` **killed** \`${who}\` with *${event.item}*`,
+                event.meters.length > 0 ? ` from __${event.meters}__ meters` : ``,
+                event.headshot ? ` (headshot)` : ``,
+                event.brainshot ? ` (brainshot)` : ``,
+                ` <https://dayz.ginfo.gg/#location=${event.coords[0]};${event.coords[1]}>`
+              ].join('')
+              if (experimental.id === '846437164648235079') {
+                const { coords } = event
+                const [x, y] = coords
+                if (inSafeZone({a:12142.65, b:12512.62, x:parseFloat(x), y:parseFloat(y), r:500})) {
+                  if ((inSafeZone({a:12417.87, b:12395.45, x:parseFloat(x), y:parseFloat(y), r:20}))) {
+                    // legal
+                  } else {
+                    // check all authorized playertags
+                    if (pvtype === `PvE `) {
+                      if (checkAuthorizedSafezone(byWho)) {
+                        bansHash[byWho].reason = message
+                      }
+                    } else if (pvtype = `PvP `) {
+                      if (checkAuthorizedLEO(byWho)) {
+                        bansHash[byWho].reason = message
+                      }
+                    }
+                  }
+                }
+              }
+              if ((who === 'NPC') && (byWho === 'UET Birdman') && (pvtype === 'PvE ')) {
+                return
+              }
+              return experimental.send(message)
+
+            case 'kill:pve':
+              if (event.players[0] !== `Unknown/Dead Entity`) {
+                return experimental.send(`PvE \`${event.pve.trim()}\` **killed** \`${event.players[0]}\` <https://dayz.ginfo.gg/#location=${event.coords[0]};${event.coords[1]}>`)
+              } else {
+                return experimental
+              }
+
+            case 'suicide': return experimental.send(`PvE \`${event.players[0]}\` **committed suicide** <https://dayz.ginfo.gg/#location=${event.coords[0]};${event.coords[1]}>`)
+            
+            case 'hit:pve:trap': return experimental.send(`PvE \`${event.pve.trim()}\` **hit** \`${event.players[0]}\` <https://dayz.ginfo.gg/#location=${event.coords[0]};${event.coords[1]}>`)
+
           }
         }
+      }
+
+      if (event.killed) {
+        if (event.pve) {
+          emitter.emit('kill:pve', event)
+        } else {
+          const prevEvent = v2Feed[eventIndex - 1] ? v2Feed[eventIndex - 1] : false
+          const { headshot, brainshot } = prevEvent
+          emitter.emit('kill:pvp', { ...event, headshot, brainshot })
+        }
       } else if (event.suicide) {
-        experimental.send(`PvE \`${event.players[0]}\` **committed suicide** <https://dayz.ginfo.gg/#location=${event.coords[0]};${event.coords[1]}>`)
+        emitter.emit('suicide', event)
       } else if (event.hit) {
         if (event.pve) {
-          if (event.pve.trim().match(/Zmb[M|F]/g) && !event.players[0].match(/Unknown\/Dead\sEntity/g)) {
-            // experimental.send(`PvE \`${event.pve.trim()}\` **hit** \`${event.players[0]}\``)
+          if (event.pve.trim().match(/Zmb[M|F]/g) && event.players[0] && !event.players[0].match(/Unknown\/Dead\sEntity/g)) {
+            emitter.emit('hit:pve:zombie', event)
           } else if (event.pve.trim().match(/Grenade|Trap/g) && event.players[0] !== 'Unknown/Dead Entity') {
-            experimental.send(`PvE \`${event.pve.trim()}\` **hit** \`${event.players[0]}\` <https://dayz.ginfo.gg/#location=${event.coords[0]};${event.coords[1]}>`)
+            emitter.emit('hit:pve:trap', event)
           } else if (event.pve.trim() === 'FallDamage') {
-            // experimental.send(`PvE \`${event.players[0]}\` fell`)
+            emitter.emit('hit:pve:fall', event)
           }
         } else {
           if (event.melee) {
-            // experimental.send(`\`${event.players[1]}\` **hit** \`${event.players[0]}\` with ${event.melee}`)
+            if (!event.dead) {
+              emitter.emit('hit:pvp:melee', event)
+            }
           } else {
             if (event.players[0] === `Unknown/Dead Entity`) {
-              // experimental.send(`PvE \`${event.players[1]}\` **hit** NPC with ${event.item}${event.meters.length > 0 ? ` from ${event.meters} meters` : `` } https://dayz.ginfo.gg/#location=${event.coords[0]};${event.coords[1]}`)
+              emitter.emit('hit:pve:npc', event)
             } else {
-              // experimental.send(`\`${event.players[1]}\` **hit** \`${event.players[0]}\` with ${event.item}${event.meters.length > 0 ? ` from ${event.meters} meters` : `` } https://dayz.ginfo.gg/#location=${event.coords[0]};${event.coords[1]}`)
+              if (!event.dead) {
+                emitter.emit('hit:pve:item', event)
+              }
             }
           }
         }
+      } else if (event.placed) {
+        emitter.emit('placed:pve', event)
       } else if (event.connected) {
-        // experimental.send(`\`${event.players[0]}\` connected`)
+        emitter.emit('connected', event)
       } else if (event.disconnected) {
-        // experimental.send(`\`${event.players[0]}\` disconnected`)
+        emitter.emit('disconnected', event)
       }
 
-      function check_a_point(a, b, x, y, r) {
-          var dist_points = (a - x) * (a - x) + (b - y) * (b - y);
-          r *= r;
-          if (dist_points < r) {
-              return true;
-          }
-          return false;
-      }
+      // if (event.killed) {
+      //   if (event.pve) {
+      //     if (event.players[0] !== `Unknown/Dead Entity`) {
+      //       experimental.send(`PvE \`${event.pve.trim()}\` **killed** \`NPC\` <https://dayz.ginfo.gg/#location=${event.coords[0]};${event.coords[1]}>`)
+      //     }
+      //   } else {
+      //     const prevEvent = v2Feed[eventIndex - 1] ? v2Feed[eventIndex - 1] : false
+      //     if (event.players[0] === `Unknown/Dead Entity`) {
+      //       experimental.send([
+      //         `PvE \`${event.players[1]}\` **killed** \`NPC\` with *${event.item}*`,
+      //         event.meters.length > 0 ? ` from __${event.meters}__ meters` : ``,
+      //         prevEvent.headshot ? ` (headshot)` : ``,
+      //         prevEvent.brainshot ? ` (brainshot)` : ``,
+      //         ` <https://dayz.ginfo.gg/#location=${event.coords[0]};${event.coords[1]}>`
+      //       ].join(''))
+      //     } else {
+      //       experimental.send(`\`${event.players[1]}\` **killed** \`${event.players[0]}\` with *${event.item}*${event.meters.length > 0 ? ` from __${event.meters}__ meters` : `` } <https://dayz.ginfo.gg/#location=${event.coords[0]};${event.coords[1]}>`)
+      //     }
+      //   }
+      // } else if (event.suicide) {
+      //   experimental.send(`PvE \`${event.players[0]}\` **committed suicide** <https://dayz.ginfo.gg/#location=${event.coords[0]};${event.coords[1]}>`)
+      // } else if (event.hit) {
+      //   if (event.pve) {
+      //     if (event.pve.trim().match(/Zmb[M|F]/g) && !event.players[0].match(/Unknown\/Dead\sEntity/g)) {
+      //       // experimental.send(`PvE \`${event.pve.trim()}\` **hit** \`${event.players[0]}\``)
+      //     } else if (event.pve.trim().match(/Grenade|Trap/g) && event.players[0] !== 'Unknown/Dead Entity') {
+      //       experimental.send(`PvE \`${event.pve.trim()}\` **hit** \`${event.players[0]}\` <https://dayz.ginfo.gg/#location=${event.coords[0]};${event.coords[1]}>`)
+      //     } else if (event.pve.trim() === 'FallDamage') {
+      //       // experimental.send(`PvE \`${event.players[0]}\` fell`)
+      //     }
+      //   } else {
+      //     if (event.melee) {
+      //       // experimental.send(`\`${event.players[1]}\` **hit** \`${event.players[0]}\` with ${event.melee}`)
+      //     } else {
+      //       if (event.players[0] === `Unknown/Dead Entity`) {
+      //         // experimental.send(`PvE \`${event.players[1]}\` **hit** NPC with ${event.item}${event.meters.length > 0 ? ` from ${event.meters} meters` : `` } https://dayz.ginfo.gg/#location=${event.coords[0]};${event.coords[1]}`)
+      //       } else {
+      //         // experimental.send(`\`${event.players[1]}\` **hit** \`${event.players[0]}\` with ${event.item}${event.meters.length > 0 ? ` from ${event.meters} meters` : `` } https://dayz.ginfo.gg/#location=${event.coords[0]};${event.coords[1]}`)
+      //       }
+      //     }
+      //   }
+      // } else if (event.connected) {
+      //   // experimental.send(`\`${event.players[0]}\` connected`)
+      // } else if (event.disconnected) {
+      //   // experimental.send(`\`${event.players[0]}\` disconnected`)
+      // }
+
+      // function check_a_point(a, b, x, y, r) {
+      //     var dist_points = (a - x) * (a - x) + (b - y) * (b - y);
+      //     r *= r;
+      //     if (dist_points < r) {
+      //         return true;
+      //     }
+      //     return false;
+      // }
+
+      // 147.34, 10420.82
+      // for isolate spy
+      // try {
+      //   const experimentalTrue = client.channels.cache.find(channel => `${channel.id}` === `${697563823594536972}`)
+      //   const { coords, players } = event
+      //   const [x, y] = coords
+      //   const [player] = players
+      //   [[147.34, 10420.82], [13451.06, 12130.22], [1400.49, 9268.08]].forEach(([_X,_Y]) => {
+      //     const inCircle = check_a_point(_X, _Y, parseFloat(x), parseFloat(y), 200)
+      //     if (inCircle && player && x && y && player !== 'Unknown/Dead Entity' && (`${sid}` === `${6196640}`)) {          
+      //       const m = `🛰 **EPD SPY**: \`${player}\` <https://dayz.ginfo.gg/#location=${x};${y}> \`\`\`${event.original}\`\`\``
+      //       experimentalTrue.send(m)
+      //     }
+      //   })
+      // } catch (e) {
+      //   console.log(' could not determine if in circle, spy')
+      // }
+
+      // for spy
+      // try {
+      //   const { coords, players } = event
+      //   const [x, y] = coords
+      //   const [player] = players
+      //   // 12102.81 / 12477.11
+      //   const inCircle = check_a_point(12102.81, 12477.11, parseFloat(x), parseFloat(y), 600)
+      //   if (inCircle && player && x && y && player !== 'Unknown/Dead Entity' && (`${sid}` === `7039821`)) {          
+      //     if (spyHash[`${player}`]) {
+      //       if (spyHash[`${player}`][`${discordPlayerId}`]) {
+      //         const discordUser = client.users.get(discordUserId)
+      //         const m = `🛰 **EPD SPY**: \`${player}\` <https://dayz.ginfo.gg/#location=${x};${y}> \`\`\`${event.original}\`\`\``
+      //         discordUser.send(m)
+      //       }
+      //     }
+      //   }
+      // } catch (e) {
+      //   console.log(' could not determine if in circle, spy')
+      // }
 
       // for trader
-      try {
-        const { coords, players } = event
-        const [x, y] = coords
-        const [player] = players
-        // 12102.81 / 12477.11
-        const inCircle = check_a_point(12102.81, 12477.11, parseFloat(x), parseFloat(y), 600)
-        if (inCircle && player && x && y && player !== 'Unknown/Dead Entity' && (`${sid}` === `7039821`)) {
-          const channelJudges = client.channels.cache.find(channel => `${channel.id}` === `785334488229478431`)
-          if (!whitelistHash[`${player}`]) {
-            if (!safezoneHash[`${player}`]) {
-              channelJudges.send(`⛔ **EPD TRESPASS**: \`${player}\` at __NEAF Trader Safe Zone__ <https://dayz.ginfo.gg/#location=${x};${y}> \`\`\`${event.original}\`\`\``)
-            }
-            if (safezoneHash[`${player}`]) {
-              channelJudges.send(`✅ **EPD AUTHORIZED**: \`${player}\` at __NEAF Trader Safe Zone__ <https://dayz.ginfo.gg/#location=${x};${y}> \`\`\`${event.original}\`\`\``)
-            }
-          }
-        }
-      } catch (e) {
-        console.log('could not determine if in circle, trader')
-      }
+      // try {
+      //   const { coords, players } = event
+      //   const [x, y] = coords
+      //   const [player] = players
+      //   // 12102.81 / 12477.11
+      //   const inCircle = check_a_point(12102.81, 12477.11, parseFloat(x), parseFloat(y), 600)
+      //   if (inCircle && player && x && y && player !== 'Unknown/Dead Entity' && (`${sid}` === `7039821`)) {
+      //     const channelJudges = client.channels.cache.find(channel => `${channel.id}` === `785334488229478431`)
+      //     if (!whitelistHash[`${player}`]) {
+      //       if (!safezoneHash[`${player}`]) {
+      //         channelJudges.send(`⛔ **EPD TRESPASS**: \`${player}\` at __NEAF Trader Safe Zone__ <https://dayz.ginfo.gg/#location=${x};${y}> \`\`\`${event.original}\`\`\``)
+      //       }
+      //       if (safezoneHash[`${player}`]) {
+      //         channelJudges.send(`✅ **EPD AUTHORIZED**: \`${player}\` at __NEAF Trader Safe Zone__ <https://dayz.ginfo.gg/#location=${x};${y}> \`\`\`${event.original}\`\`\``)
+      //       }
+      //     }
+      //   }
+      // } catch (e) {
+      //   console.log('could not determine if in circle, trader')
+      // }
 
       // for npc judges
-      try {
-        const { coords, players } = event
-        const [x, y] = coords
-        const [player] = players
+      // try {
+      //   const { coords, players } = event
+      //   const [x, y] = coords
+      //   const [player] = players
 
-        const npcJudgeLocations = [
-          {
-            "x": "6815.72",
-            "z": "3010.08"
-          },
-          {
-            "x": "5814.01",
-            "z": "2200.45"
-          },
-          {
-            "x": "9929.78",
-            "z": "1620.16"
-          },
-          {
-            "x": "10596.32",
-            "z": "2531.61"
-          },
-          {
-            "x": "13019.1",
-            "z": "10552.61"
-          },
-          {
-            "x": "12053.54",
-            "z": "9770.11"
-          },
-          {
-            "x": "3039.97",
-            "z": "13774.49"
-          },
-          {
-            "x": "4163.89",
-            "z": "11764.08"
-          },
-          {
-            "x": "12004.95",
-            "z": "14809.27"
-          },
-          {
-            "x": "12111.97",
-            "z": "13604.23"
-          }
-        ]
+      //   const npcJudgeLocations = [
+      //     {
+      //       "x": "6815.72",
+      //       "z": "3010.08"
+      //     },
+      //     {
+      //       "x": "5814.01",
+      //       "z": "2200.45"
+      //     },
+      //     {
+      //       "x": "9929.78",
+      //       "z": "1620.16"
+      //     },
+      //     {
+      //       "x": "10596.32",
+      //       "z": "2531.61"
+      //     },
+      //     {
+      //       "x": "13019.1",
+      //       "z": "10552.61"
+      //     },
+      //     {
+      //       "x": "12053.54",
+      //       "z": "9770.11"
+      //     },
+      //     {
+      //       "x": "3039.97",
+      //       "z": "13774.49"
+      //     },
+      //     {
+      //       "x": "4163.89",
+      //       "z": "11764.08"
+      //     },
+      //     {
+      //       "x": "12004.95",
+      //       "z": "14809.27"
+      //     },
+      //     {
+      //       "x": "12111.97",
+      //       "z": "13604.23"
+      //     }
+      //   ]
 
-        npcJudgeLocations.forEach(npcJudgeLocation => {
-          const inCircle = check_a_point(parseFloat(npcJudgeLocation.x), parseFloat(npcJudgeLocation.z), parseFloat(x), parseFloat(y), 50)
-          if (inCircle && player && x && y && player !== 'Unknown/Dead Entity' && (`${sid}` === `7039821`)) {
-            const channelJudges = client.channels.cache.find(channel => `${channel.id}` === `785334488229478431`)
-            if (!whitelistHash[`${player}`]) {
-              channelJudges.send(`<@&783137187403268147> **EPD ALERT**: \`${player}\` approaching __NPC JUDGE__ <https://dayz.ginfo.gg/#location=${x};${y}> \`\`\`${event.original}\`\`\``)
-            }
-          }
-        })
+      //   npcJudgeLocations.forEach(npcJudgeLocation => {
+      //     const inCircle = check_a_point(parseFloat(npcJudgeLocation.x), parseFloat(npcJudgeLocation.z), parseFloat(x), parseFloat(y), 50)
+      //     if (inCircle && player && x && y && player !== 'Unknown/Dead Entity' && (`${sid}` === `7039821`)) {
+      //       const channelJudges = client.channels.cache.find(channel => `${channel.id}` === `785334488229478431`)
+      //       if (!whitelistHash[`${player}`]) {
+      //         channelJudges.send(`<@&783137187403268147> **EPD ALERT**: \`${player}\` approaching __NPC JUDGE__ <https://dayz.ginfo.gg/#location=${x};${y}> \`\`\`${event.original}\`\`\``)
+      //       }
+      //     }
+      //   })
 
-      } catch (e) {
-        console.log('could not determine if in circle, judges')
-      }
+      // } catch (e) {
+      //   console.log('could not determine if in circle, judges')
+      // }
+
     }
   })
 
@@ -520,7 +863,7 @@ const parseServerLog = async (sid, user, serverLog, ftpPath, /** actually newest
 
   // sync the database with the new stats
   await lineObjects
-    .filter(lo => (lo.type === `is connected`) || (lo.type === `hit by Player`) || (lo.type === `killed by Player`) || (lo.type === `has been disconnected`))
+    .filter(lo => (lo.type === '##### PlayerList') || (lo.type === '\>\\)$') || (lo.type === `is connected`) || (lo.type === `hit by Player`) || (lo.type === `killed by Player`) || (lo.type === `has been disconnected`))
     .reduce(async (a, {
       line,
       fromMeters,
@@ -534,7 +877,7 @@ const parseServerLog = async (sid, user, serverLog, ftpPath, /** actually newest
       headshot,
       brainshot,
       dead
-    }) => {
+    }, currentIndex, sourceArray) => {
       // console.log('lines>', {
       //   line,
       //   fromMeters,
@@ -600,6 +943,8 @@ const parseServerLog = async (sid, user, serverLog, ftpPath, /** actually newest
 
 
             try {
+              const prevEvent = sourceArray[currentIndex-1] ? sourceArray[currentIndex-1] : { headshot: null, brainshot: null }
+              const { headshot: prevHeadshot, brainshot: prevBrainshot } = prevEvent
               const pid = line.match(/(id=[a-zA-Z0-9_-]*)/g)[1].split('id=')[1]
               const psquery = `
                 update playersservers
@@ -609,7 +954,8 @@ const parseServerLog = async (sid, user, serverLog, ftpPath, /** actually newest
                   psbrainshots = psbrainshots + $6
                   where pid = $1 and sid = $2 returning *
               `
-              const psparameters = [pid, sid, forDamage, fromMeters, (headshot !== null) ? 1 : 0, (brainshot !== null) ? 1 : 0]
+              // const psparameters = [pid, sid, forDamage, fromMeters, (prevHeadshot !== null) ? 1 : 0, (prevBrainshot !== null) ? 1 : 0]
+              const psparameters = [pid, sid, forDamage, fromMeters, 0, 0]
               // console.log(psparameters)
               const psresult = await db.query(psquery, psparameters)
             } catch (e) {
@@ -627,21 +973,28 @@ const parseServerLog = async (sid, user, serverLog, ftpPath, /** actually newest
 
 
             try {
+              const prevEvent = sourceArray[currentIndex-1] ? sourceArray[currentIndex-1] : { headshot: null, brainshot: null }
+              const { headshot: prevHeadshot, brainshot: prevBrainshot } = prevEvent
               const pid = line.match(/(id=[a-zA-Z0-9_-]*)/g)[1].split('id=')[1]
               const psquery = `
                 update playersservers
                 set pskills = pskills + 1,
                   pskd = ((pskills + 1) / (case psdeaths when 0.0000 then 1.0000 else psdeaths end)),
-                  psmeters = (case (psmeters < $3) when true then $3 else psmeters end)
+                  psmeters = (case (psmeters < $3) when true then $3 else psmeters end),
+                  psheadshots = psheadshots + $4,
+                  psbrainshots = psbrainshots + $5,
+                  pscurrentkillstreak = pscurrentkillstreak + 1
                   where pid = $1 and sid = $2 returning *
               `
-              const psparameters = [pid, sid, fromMeters]
+              const psparameters = [pid, sid, fromMeters, (prevHeadshot !== null) ? 1 : 0, (prevBrainshot !== null) ? 1 : 0]
               const psresult = await db.query(psquery, psparameters)
               const pid1 = line.match(/(id=[a-zA-Z0-9_-]*)/g)[0].split('id=')[1]
               const psquery1 = `
                 update playersservers
                 set psdeaths = psdeaths + 1,
-                  pskd = pskills/(psdeaths + 1.0000)
+                  pskd = pskills/(psdeaths + 1.0000),
+                  pskillstreak = (case (pskillstreak < pscurrentkillstreak) when true then pscurrentkillstreak else pskillstreak end),
+                  pscurrentkillstreak = 0
                   where pid = $1 and sid = $2 returning *
               `
               const psparameters1 = [pid1, sid]
@@ -685,6 +1038,46 @@ const parseServerLog = async (sid, user, serverLog, ftpPath, /** actually newest
           })
         })
 
+        case '##### PlayerList': return await a.then(async r => {
+          return await new Promise(async (resolve, reject) => {
+
+
+            // reset map
+
+            if (playerMapsHash[schannel] && playerMapsHash[schannel].mapImage && playerMapsHash[schannel].playerImage && playerMapsHash[schannel].mapCanvas && playerMapsHash[schannel].mapCanvasCtx) {
+              playerMapsHash[schannel].mapCanvasCtx.drawImage(playerMapsHash[schannel].mapImage, 0, 0)
+            } else {
+              initCanvas(schannel)
+            }
+
+            resolve()
+
+
+          })
+        })
+
+        case '\>\\)$': return await a.then(async r => {
+          return await new Promise(async (resolve, reject) => {
+
+
+            // use coords
+
+            if (playerMapsHash[schannel] && playerMapsHash[schannel].mapImage && playerMapsHash[schannel].playerImage && playerMapsHash[schannel].mapCanvas && playerMapsHash[schannel].mapCanvasCtx) {
+              if (player === 'sundaysatan') {
+                console.log('whisper')
+              } else {
+                playerMapsHash[schannel].mapCanvasCtx.drawImage(playerMapsHash[schannel].playerImage, ((coords.x * .1) / 2), (((15350 - coords.y) * .1) / 2))
+                playerMapsHash[schannel].mapCanvasCtx.fillText(player, ((coords.x * .1) / 2), (((15350 - coords.y) * .1) / 2) - 5)
+                // console.log(`${(coords.x * .1) / 4}, ${(coords.y * .1) / 4}`, coords.x, coords.y)
+              }
+            }
+
+            resolve()
+
+
+          })
+        })
+
         default: return await a.then(async r => {
           return await new Promise(async (resolve, reject) => {
             resolve()
@@ -710,9 +1103,10 @@ const parseServerLog = async (sid, user, serverLog, ftpPath, /** actually newest
   killFeedTimeouts.push({ i: t, sid })
   // store the new log size
   updateServerLogStore(sid, user, ftpPath, recentSize)
+  doBans()
 }
 
-const initLiveKillFeed = async (sid, user, schannel, sportlist) => {
+const initLiveKillFeed = async (sid, user, schannel, sportlist, send) => {
   // go get server logs info from gameserver service
   const authBearer = user.nakey
   const gameserver = await getGameserver({ id: sid }, authBearer)
@@ -729,16 +1123,27 @@ const initLiveKillFeed = async (sid, user, schannel, sportlist) => {
     return
   }
   // if there's a server log file
-  const serverLogPath = log_files[0].replace(`${sportlist}/`,'')
+  const serverLogPath = log_files.filter(file => file.match(/ADM/g))[0].replace(`${sportlist}/`,'')
   // then fetch that server log's most recent size
   const lastServerLogSizeFromREST = await new Promise(async (resolve, reject) => {
     const method = `GET`
     const path = `/services/${sid}/gameservers/file_server/size?path=${gameserver.game_specific.path}${serverLogPath}`
     doNitradoApi(method, path, async (response) => {
       console.log('resolved', path)
-      const json = JSON.parse(response.body)
-      const serverLogSize = json.data ? json.data.size : 0
-      resolve(serverLogSize)
+      const f = () => {
+        try {
+          console.log(response.body)
+          const json = JSON.parse(response.body)
+          const serverLogSize = json.data ? json.data.size : 0
+          resolve(serverLogSize)
+        } catch (e) {
+          console.log('illformed response')
+          setTimeout(() => {
+            f()
+          }, 15000)
+        }
+      }
+      f()
     }, (error) => {
       console.log('did not resolve')
       resolve(0)
@@ -749,6 +1154,8 @@ const initLiveKillFeed = async (sid, user, schannel, sportlist) => {
     const query = `select * from servers where sid = $1`
     const parameters = [sid]
     const result = await db.query(query, parameters)
+    const [row] = result.rows
+    console.log(row ? { sname: row.sname, sid: row.sid, schannel: row.schannel } : {})
     if (result.rows.length > 0) {
       resolve(result.rows)
     } else {
@@ -759,6 +1166,21 @@ const initLiveKillFeed = async (sid, user, schannel, sportlist) => {
   // calculate offset
   const length = lastServerLogSizeFromREST - lastServerLogSizeFromStore
   console.log('>>>>>>> length', schannel, lastServerLogSizeFromREST, lastServerLogSizeFromStore, length)
+  try {
+    const [row] = lastServerLogFromStore
+    const killfeedObject = (row ? { sname: row.sname, sid: row.sid, schannel: row.schannel } : {})
+    const message = [
+      killfeedObject.sname,
+      schannel,
+      `lastServerLogSizeFromREST=${lastServerLogSizeFromREST}`,
+      `lastServerLogSizeFromStore=${lastServerLogSizeFromStore}`,
+      `length=${length}`,
+    ].reduce((a,c) => `${a}\`${c}\` `, ``)
+    getExperimentalChannel().send(message)
+    if (send) send(message)
+  } catch (e) {
+    console.log(e)
+  }
   // if offset is zero there's no change
   if (length === 0) {
     // there are logs, but no change in logs
@@ -864,20 +1286,31 @@ const discordClient = new DiscordClient()
 const client = discordClient
 const prefix = '!'
 
-// rooster
-client.login(`Njk5MDMxMTM4ODAyNTk3OTE4.XpOdeg.xLNUSlSBr8AqI8lyZCmh_mhx4lY`)
+// killfeed
+client.login(`ODA1OTMxNjU2Mjc0OTAzMDYw.YBiEWA.xcY7EEyn5qkVJfMcum7fLuEhCgU`)
 
 // killfeed bot
 client.once('ready', async () => {
+  const channel = client.channels.cache
+    .find(channel => `${channel.id}` === `805974579859816529`)
+  channel.send(`Ready`)
+  setExperimentalChannel(channel)
   // client.guilds.cache.find(guild => console.log(guild))
   // const experimental = client.channels.cache.find(channel => channel.name === 'experimental')
   // experimental.send('i have been summoned')
   // HERE
-  const onlineServers = await db.query(`
-    select s.sid, convert_from(decrypt(u.nakey::bytea, 'secret-key', 'bf'), 'utf-8') as nakey from servers s, users u where s.sactive = 1 and s.uid = u.uid
-  `, [])
+  // const onlineServers = await db.query(`
+  //   select s.sid, convert_from(decrypt(u.nakey::bytea, 'secret-key', 'bf'), 'utf-8') as nakey, s.sportlist, s.schannel from servers s, users u where s.sactive = 1 and s.uid = u.uid
+  // `, [])
   // onlineServers.rows.forEach(onlineServer => {
-  //   initLiveKillFeed(parseInt(onlineServer.sid), { nakey: onlineServer.nakey })
+  //   try {
+  //     console.log('=== online server', parseInt(onlineServer.sid), { nakey: onlineServer.nakey }, onlineServer.sportlist, onlineServer.schannel)
+  //     setTimeout(() => {
+  //       initLiveKillFeed(parseInt(onlineServer.sid), { nakey: onlineServer.nakey }, onlineServer.schannel, onlineServer.sportlist)
+  //     }, 5000 * (killFeedTimeouts.length + 1))
+  //   } catch (e) {
+  //     console.log(e)
+  //   }
   // })
 
   setInterval(async () => {
@@ -891,31 +1324,31 @@ client.once('ready', async () => {
 })
 
 // safezone interval
-client.once('ready', async () => {
-  const channel = client.channels.cache
-    .find(channel => `${channel.id}` === `785334488229478431`)
-  setInterval(() => {
-    Object
-      .keys(safezoneHash)
-      .filter((key) => {
-        const timeRemaining = ((new Date().getTime() - safezoneHash[key].expires)/60000).toFixed(0) * -1
-        return timeRemaining <= 0
-      })
-      .forEach((key) => {
-        const id = `${safezoneHash[key].id}`
-        delete safezoneHash[key]
-        fs.writeFileSync(safezoneDb, JSON.stringify(safezoneHash))
-        if (!safezoneHash[key]) {
-          channel.send(`<@${id}> Safezone access **expired** for \`${key}\`, removed from list`)
-        } else {
-          channel.send(`<@${id}> Safezone access **expired** for \`${key}\` for <@${id}>, but could not remove from list`)
-        }
-      })
-  }, 60000)
-})
+// client.once('ready', async () => {
+//   const channel = client.channels.cache
+//     .find(channel => `${channel.id}` === `785334488229478431`)
+//   setInterval(() => {
+//     Object
+//       .keys(safezoneHash)
+//       .filter((key) => {
+//         const timeRemaining = ((new Date().getTime() - safezoneHash[key].expires)/60000).toFixed(0) * -1
+//         return timeRemaining <= 0
+//       })
+//       .forEach((key) => {
+//         const id = `${safezoneHash[key].id}`
+//         delete safezoneHash[key]
+//         fs.writeFileSync(safezoneDb, JSON.stringify(safezoneHash))
+//         if (!safezoneHash[key]) {
+//           channel.send(`<@${id}> Safezone access **expired** for \`${key}\`, removed from list`)
+//         } else {
+//           channel.send(`<@${id}> Safezone access **expired** for \`${key}\` for <@${id}>, but could not remove from list`)
+//         }
+//       })
+//   }, 60000)
+// })
 
 client.on('message', async message => {
-  console.log(`bot recieved message`, message.channel.id, message.content, message.guild)
+  // console.log(`bot recieved message`, message.channel.id, message.content, message.guild)
   // if (message.content.substring(0,5) === 'claim') {
   //   const pid = message.content.substring(6,message.content.length)
   //   const pdid = message.author.id
@@ -959,12 +1392,75 @@ client.on('message', async message => {
   //     }
   //   }
   // }
-  if (message.content.substring(0,8) === '!rooster') {
-    if (message.content.substring(0,13) === '!rooster help') {
-      message.channel.send(`usage: !rooster <rank,leaderboard,online> [<args>] \n\te.g., try '!rooster rank help' to see how to use the rank command`)
+  const reset = async (send) => {
+    killFeedTimeouts.forEach(i => clearInterval(i))
+    const onlineServers = await db.query(`
+      select s.sid, convert_from(decrypt(u.nakey::bytea, 'secret-key', 'bf'), 'utf-8') as nakey, s.sportlist, s.schannel from servers s, users u where s.sactive = 1 and s.uid = u.uid
+    `, [])
+    onlineServers.rows.forEach(onlineServer => {
+      try {
+        console.log('=== online server', parseInt(onlineServer.sid), { nakey: onlineServer.nakey }, onlineServer.sportlist, onlineServer.schannel)
+        setTimeout(() => {
+          initLiveKillFeed(parseInt(onlineServer.sid), { nakey: onlineServer.nakey }, onlineServer.schannel, onlineServer.sportlist, send)
+        }, 5000 * (killFeedTimeouts.length + 1))
+      } catch (e) {
+        console.log(e)
+      }
+    })
+  }
+  const stop = async (send) => {
+    killFeedTimeouts.forEach(i => clearInterval(i))
+    send(`Ok`)
+  }
+  if (message.content.substring(0,9) === '!killfeed') {
+    if (message.content.substring(0,15) === '!killfeed reset') {
+      if (message.author.id === `804194483029671947`) {
+        reset(message.channel.send)
+      } else {
+        message.channel.send(`No`)
+      }
     }
-    if (message.content.substring(0,15) === '!rooster online') {
-      if (message.content.substring(16, 27) === 'leaderboard') {
+    if (message.content.substring(0,14) === '!killfeed stop') {
+      if (message.author.id === `804194483029671947`) {
+        stop(message.channel.send)
+      } else {
+        message.channel.send(`No`)
+      }
+    }
+    if (message.content.substring(0,14) === '!killfeed mint') {
+      const targetPlayerName = message.content.substring(15, message.content.length)
+      const rankQuery = await db.query(`
+        select * from (
+          select
+            p.pname, ps.pskills, ps.psdeaths, ps.pskd, ps.psdamage, ps.psmeters, ps.psheadshots, ps.psbrainshots, ps.psstatus, ps.pskillstreak, ps.pscurrentkillstreak,
+            (ps.psheadshots + ps.psbrainshots + ps.pskd + (ps.psmeters * 0.005) + (ps.psdamage * 0.005) + ps.pskills - ps.psdeaths) as score,
+            row_number() over(order by (ps.psheadshots + ps.psbrainshots + ps.pskd + (ps.psmeters * 0.005) + (ps.psdamage * 0.005) + ps.pskills - ps.psdeaths) desc) as rankk,
+            (select count(*) from playersservers ps, servers s where ps.sid = s.sid and s.schannel = $2) as of
+          from
+            playersservers ps,
+            players p,
+            servers s
+          where
+            ps.pid = p.pid and ps.sid = s.sid and s.schannel = $2
+          group by
+            p.pname, ps.pskills, ps.psdeaths, ps.pskd, ps.psdamage, ps.psmeters, ps.psheadshots, ps.psbrainshots, ps.psstatus, ps.pskillstreak, ps.pscurrentkillstreak
+          order by (ps.psheadshots + ps.psbrainshots + ps.pskd + (ps.psmeters * 0.005) + (ps.psdamage * 0.005) + ps.pskills - ps.psdeaths) desc
+        ) as leaderboard where leaderboard.pname = $1
+      `, [targetPlayerName, message.channel.id])
+      console.log('ROWS=====', rankQuery.rows)
+      const [rank] = rankQuery.rows
+      if (rank) {
+        const token = `Survivor _${rank.pname}_ ranked ${rank.rankk}/${rank.of} with ${rank.pskills} kills, ${rank.psdeaths} deaths, for a ${rank.pskd} k/d, dealing ${rank.psdamage} damage, with their longest kill shot from ${rank.psmeters} meters, as well as ${rank.psheadshots} headshots, ${rank.psbrainshots} brainshots, whose current kill streak is ${rank.pscurrentkillstreak}, and longest kill streak at ${rank.pskillstreak} for an overall score of ${rank.score} points.`
+        message.channel.send(token)
+      } else {
+        message.channel.send(`Survivor _${targetPlayerName}_ not ranked.`)
+      }
+    }
+    if (message.content.substring(0,14) === '!killfeed help') {
+      message.channel.send(`usage: !killfeed <rank,mint,leaderboard,online,map,bans> [<args>] \n\te.g., try '!killfeed rank help' to see how to use the rank command`)
+    }
+    if (message.content.substring(0,16) === '!killfeed online') {
+      if (message.content.substring(17, 28) === 'leaderboard') {
         const query = `
           select
             p.pname, ps.pskills, ps.psdeaths, ps.pskd, ps.psdamage, ps.psmeters, ps.psheadshots, ps.psbrainshots, ps.psstatus,
@@ -981,21 +1477,21 @@ client.on('message', async message => {
           order by (ps.psheadshots + ps.psbrainshots + ps.pskd + (ps.psmeters * 0.005) + (ps.psdamage * 0.005) + ps.pskills - ps.psdeaths) desc
         `
         const rankQuery = await db.query(query, [message.channel.id])
-
+  
         if (rankQuery.rows.length > 0) {
           const canvas = createCanvas(915, (rankQuery.rows.length + 3) * 12)
           const ctx = canvas.getContext('2d')
-
+  
           // blue outline
           ctx.fillStyle = 'rgba(0,0,25,1)'
           ctx.beginPath()
-          ctx.fillRect(18, 18, 889, ((rankQuery.rows.length + 1) * 12) + 8)
+          ctx.fillRect(18, 18, 890, ((rankQuery.rows.length + 1) * 12) + 8)
           ctx.stroke()
-
+  
           // primary dark background
           ctx.fillStyle = 'rgba(50,50,50,1)'
           ctx.beginPath()
-          ctx.fillRect(20, 20, 885, ((rankQuery.rows.length + 1) * 12) + 4)
+          ctx.fillRect(20, 20, 886, ((rankQuery.rows.length + 1) * 12) + 4)
           ctx.stroke()
           
           const rows = rankQuery.rows
@@ -1012,22 +1508,22 @@ client.on('message', async message => {
             score: 'score',
             rankk: 'rank'
           }, ...rows]
-
-          console.log('rowslength', rows.length, x.length)
-
+  
+          // console.log('rowslength', rows.length, x.length)
+  
           for (let i = 0; i < x.length; i++) {
             ctx.fillStyle = i % 2 > 0 ? 'rgba(15,15,15,1)' : 'rgba(50,50,50,1)'
             if (x[i].psstatus === 1) {
               ctx.fillStyle = 'rgba(0,25,0,1)'
             }
             ctx.beginPath()
-            ctx.fillRect(20, (i * 12) + 3 + 20, 885, 12)
+            ctx.fillRect(20, (i * 12) + 3 + 20, 886, 12)
             ctx.stroke()
           }
-
-
+  
+  
           x.map((n, o) => {
-            console.log('for each', o)
+            // console.log('for each', o)
             const keys = Object.keys(n)
             const row = keys.map((key) => {
               let j, klength, r = null
@@ -1047,16 +1543,20 @@ client.on('message', async message => {
                 case 'psbrainshots':
                 case 'psdeaths':
                 case 'pskills':
-                case 'psmeters':
                   j = `${n[key]}`
                   klength = j.length
                   r = j.padStart((10 - klength) + klength)
+                  return r
+                case 'psmeters':
+                  j = `${n[key]}`
+                  klength = j.length
+                  r = j.padStart((11 - klength) + klength)
                   return r
                 case 'score':
                 case 'psdamage':
                   j = `${n[key]}`
                   klength = j.length
-                  r = j.padStart((12 - klength) + klength)
+                  r = j.padStart((13 - klength) + klength)
                   return r
                 case 'pskd':
                   j = `${n[key]}`
@@ -1081,7 +1581,7 @@ client.on('message', async message => {
             ctx.fillStyle = 'white'
             ctx.fillText(`${n} |`, 20, ((i + 1) * 12) + 20)
           })
-
+  
           const attachment = new MessageAttachment(canvas.toBuffer(), 'leaderboard.png')
           message.channel.send(attachment)
         } else {
@@ -1095,7 +1595,7 @@ client.on('message', async message => {
           const survivors = rankQuery.rows
             .map(row => `${row.pname}`)
             .reduce((a,c) => {
-              console.log('reducing', `${a}${c}\n`)
+              // console.log('reducing', `${a}${c}\n`)
               return `${a}${c}\n`
             }, ``)
           message.channel.send(`There are ${rankQuery.rows.length} survivors online.\n\`\`\`\n${survivors}\`\`\``)
@@ -1104,9 +1604,100 @@ client.on('message', async message => {
         }
       }
     }
-    if (message.content.substring(0,13) === '!rooster rank') {
-      if (message.content.substring(14,16) === 'kd') {
-        const targetPlayerName = message.content.substring(17,message.content.length)
+    if (message.content.substring(0,13) === '!killfeed map') {
+      console.log(playerMapsHash[message.channel.id], message.channel.id)
+      if (playerMapsHash[message.channel.id] && playerMapsHash[message.channel.id].mapImage && playerMapsHash[message.channel.id].playerImage && playerMapsHash[message.channel.id].mapCanvas && playerMapsHash[message.channel.id].mapCanvasCtx) {
+        const attachment = new MessageAttachment(playerMapsHash[message.channel.id].mapCanvas.toBuffer(), 'player-map.png')
+        message.channel.send(attachment)
+      } else {
+        message.channel.send(`Map unavailable`)
+      }
+    }
+    if ((message.content.substring(0,13) === '!killfeed ban') && message.content.substring(13,14) !== 's') {
+      if (message.author.id === `804194483029671947`) {
+        const targetPlayerName = message.content.substring(14, message.content.length)
+        console.log('targetPlayerName', targetPlayerName, bansHash[targetPlayerName])
+        bansHash[targetPlayerName] = {
+          until: new Date().getTime() + (60 * 60 * 24 * 1000),
+          reason: `manual ban`
+        }
+        doBans()
+        message.channel.send(`Ok, give it like 5 minutes`)
+      } else {
+        message.channel.send(`No`)
+      }
+    }
+    if (message.content.substring(0,14) === '!killfeed bans') {
+      const bansList = Object.keys(bansHash).map(key => {
+        return `\`${key}\` **banned** until __${new Date(bansHash[key].until)}__ for -> ${bansHash[key].reason}`
+      })
+      if (bansList.length > 0) {
+        bansList.forEach(ban => message.channel.send(ban))
+      } else {
+        message.channel.send(`There are no bans currently`)
+      }
+    }
+    if (message.content.substring(0,15) === '!killfeed unban') {
+      if (message.author.id === `804194483029671947`) {
+        const targetPlayerName = message.content.substring(16, message.content.length)
+        console.log('targetPlayerName', targetPlayerName, bansHash[targetPlayerName])
+        if (bansHash[targetPlayerName]) {
+          delete bansHash[targetPlayerName]
+        }
+        doBans()
+        message.channel.send(`Ok, give it like 5 minutes`)
+      } else {
+        message.channel.send(`No`)
+      }
+    }
+    if (message.content.substring(0,21) === '!killfeed unauthorize') {
+      if (message.author.id === `804194483029671947`) {
+        const targetPlayerName = message.content.substring(22, message.content.length)
+        console.log('targetPlayerName', targetPlayerName, bansHash[targetPlayerName])
+        if (tradersHash[targetPlayerName]) {
+          delete tradersHash[targetPlayerName]
+          saveTraders()
+          message.channel.send(`Ok, give it like 5 minutes`)
+        }
+        if (leosHash[targetPlayerName]) {
+          delete leosHash[targetPlayerName]
+          saveLeos()
+          message.channel.send(`Ok, give it like 5 minutes`)
+        }
+      } else {
+        message.channel.send(`No`)
+      }
+    }
+    if (message.content.substring(0,19) === '!killfeed authorize') {
+      if (message.content.substring(20,26) === 'trader') {
+        if (message.author.id === `804194483029671947`) {
+          const targetPlayerName = message.content.substring(27, message.content.length)
+          console.log('targetPlayerName', targetPlayerName, tradersHash[targetPlayerName])
+          // delete bansHash[targetPlayerName]
+          tradersHash[targetPlayerName] = new Date().getTime()
+          saveTraders()
+          message.channel.send(`Ok, give it like 5 minutes`)
+        } else {
+          message.channel.send(`No`)
+        }
+      } else if (message.content.substring(20,23) === 'leo') {
+        if (message.author.id === `804194483029671947`) {
+          const targetPlayerName = message.content.substring(24, message.content.length)
+          console.log('targetPlayerName', targetPlayerName, leosHash[targetPlayerName])
+          // delete bansHash[targetPlayerName]
+          leosHash[targetPlayerName] = new Date().getTime()
+          saveLeos()
+          message.channel.send(`Ok, give it like 5 minutes`)
+        } else {
+          message.channel.send(`No`)
+        }
+      } else{
+        message.channel.send(`Nah`)
+      }
+    }
+    if (message.content.substring(0,14) === '!killfeed rank') {
+      if (message.content.substring(15,17) === 'kd') {
+        const targetPlayerName = message.content.substring(18,message.content.length)
         const rankQuery = await db.query(`
           select
             r.*, (select count(*) from playersservers ps, servers s where ps.sid = s.sid and s.schannel = $2) as of
@@ -1137,8 +1728,8 @@ client.on('message', async message => {
         } else {
           message.channel.send(`Survivor _${targetPlayerName}_ not ranked.`)
         }
-      } else if (message.content.substring(14,19) === 'kills') {
-        const targetPlayerName = message.content.substring(20,message.content.length)
+      } else if (message.content.substring(15,20) === 'kills') {
+        const targetPlayerName = message.content.substring(21,message.content.length)
         const rankQuery = await db.query(`
           select
             r.*, (select count(*) from playersservers ps, servers s where ps.sid = s.sid and s.schannel = $2) as of
@@ -1169,7 +1760,7 @@ client.on('message', async message => {
         } else {
           message.channel.send(`Survivor _${targetPlayerName}_ not ranked.`)
         }
-      } else if (message.content.substring(14,20) === 'deaths') {
+      } else if (message.content.substring(15,21) === 'deaths') {
         const targetPlayerName = message.content.substring(21,message.content.length)
         const rankQuery = await db.query(`
           select
@@ -1201,8 +1792,8 @@ client.on('message', async message => {
         } else {
           message.channel.send(`Survivor _${targetPlayerName}_ not ranked.`)
         }
-      } else if (message.content.substring(14,20) === 'damage') {
-        const targetPlayerName = message.content.substring(21,message.content.length)
+      } else if (message.content.substring(15,21) === 'damage') {
+        const targetPlayerName = message.content.substring(22,message.content.length)
         const rankQuery = await db.query(`
           select
             r.*, (select count(*) from playersservers ps, servers s where ps.sid = s.sid and s.schannel = $2) as of
@@ -1233,8 +1824,8 @@ client.on('message', async message => {
         } else {
           message.channel.send(`Survivor _${targetPlayerName}_ not ranked.`)
         }
-      } else if (message.content.substring(14,20) === 'meters') {
-        const targetPlayerName = message.content.substring(21,message.content.length)
+      } else if (message.content.substring(15,21) === 'meters') {
+        const targetPlayerName = message.content.substring(22,message.content.length)
         const rankQuery = await db.query(`
           select
             r.*, (select count(*) from playersservers ps, servers s where ps.sid = s.sid and s.schannel = $2) as of
@@ -1265,8 +1856,8 @@ client.on('message', async message => {
         } else {
           message.channel.send(`Survivor _${targetPlayerName}_ not ranked.`)
         }
-      } else if (message.content.substring(14,23) === 'headshots') {
-        const targetPlayerName = message.content.substring(24,message.content.length)
+      } else if (message.content.substring(15,24) === 'headshots') {
+        const targetPlayerName = message.content.substring(25,message.content.length)
         const rankQuery = await db.query(`
           select
             r.*, (select count(*) from playersservers ps, servers s where ps.sid = s.sid and s.schannel = $2) as of
@@ -1297,7 +1888,7 @@ client.on('message', async message => {
         } else {
           message.channel.send(`Survivor _${targetPlayerName}_ not ranked.`)
         }
-      } else if (message.content.substring(14,24) === 'brainshots') {
+      } else if (message.content.substring(15,25) === 'brainshots') {
         const targetPlayerName = message.content.substring(25,message.content.length)
         const rankQuery = await db.query(`
           select
@@ -1329,8 +1920,8 @@ client.on('message', async message => {
         } else {
           message.channel.send(`Survivor _${targetPlayerName}_ not ranked.`)
         }
-      } else if (message.content.substring(14,25) === 'leaderboard') {
-        const targetPlayerName = message.content.substring(26,message.content.length)
+      } else if (message.content.substring(15,26) === 'leaderboard') {
+        const targetPlayerName = message.content.substring(27,message.content.length)
         const rankQuery = await db.query(`
           select * from (
             select
@@ -1393,11 +1984,11 @@ client.on('message', async message => {
           message.channel.send(`Survivor _${targetPlayerName}_ not ranked.`)
         }
       } else {
-        message.channel.send(`usage: !rooster rank <kd,kills,deaths,damage,meters,headshots,brainshots,leaderboard> <survivor-name> \n\te.g., !rooster rank kd sundaysatan\n\tnote: player names are case sensitive`)
+        message.channel.send(`usage: !killfeed rank <kd,kills,deaths,damage,meters,headshots,brainshots,leaderboard> <survivor-name> \n\te.g., !killfeed rank kd sundaysatan\n\tnote: player names are case sensitive`)
       }
     }
-    if (message.content.substring(0,20) === '!rooster leaderboard') {
-      if (message.content.substring(21,23) === 'kd') {
+    if (message.content.substring(0,21) === '!killfeed leaderboard') {
+      if (message.content.substring(22,24) === 'kd') {
         const rankQuery = await db.query(`
           select
             p.pname, ps.pskills, ps.psdeaths, ps.pskd, ps.psdamage, ps.psmeters, ps.psheadshots, ps.psbrainshots, ps.psstatus,
@@ -1415,19 +2006,19 @@ client.on('message', async message => {
           order by ps.pskd desc
           limit 50
         `, [message.channel.id])
-
+  
         if (rankQuery.rows.length > 0) {
           const canvas = createCanvas(915, 640)
           const ctx = canvas.getContext('2d')
-
+  
           ctx.fillStyle = 'rgba(0,0,25,1)'
           ctx.beginPath()
-          ctx.fillRect(18, 18, 889, 608)
+          ctx.fillRect(18, 18, 890, 608)
           ctx.stroke()
-
+  
           ctx.fillStyle = 'rgba(50,50,50,1)'
           ctx.beginPath()
-          ctx.fillRect(20, 20, 885, 600 + 4)
+          ctx.fillRect(20, 20, 886, 600 + 4)
           ctx.stroke()
           
           rankQuery.rows.pop()
@@ -1445,17 +2036,17 @@ client.on('message', async message => {
             score: 'score',
             rankk: 'rank'
           }, ...rows]
-
+  
           for (let i = 1; i < 50; i++) {
             ctx.fillStyle = i % 2 > 0 ? 'rgba(15,0,0,1)' : 'rgba(50,50,50,1)'
             if (rows[i-1].psstatus === 1) {
               ctx.fillStyle = 'rgba(0,25,0,1)'
             }
             ctx.beginPath()
-            ctx.fillRect(20, (i * 12) + 3 + 20, 885, 12)
+            ctx.fillRect(20, (i * 12) + 3 + 20, 886, 12)
             ctx.stroke()
           }
-
+  
           x.map((n) => {
             const keys = Object.keys(n)
             const row = keys.map((key) => {
@@ -1485,7 +2076,7 @@ client.on('message', async message => {
                 case 'psdamage':
                   j = `${n[key]}`
                   klength = j.length
-                  r = j.padStart((12 - klength) + klength)
+                  r = j.padStart((13 - klength) + klength)
                   return r
                 case 'pskd':
                   j = `${n[key]}`
@@ -1511,7 +2102,7 @@ client.on('message', async message => {
             ctx.fillStyle = 'white'
             ctx.fillText(`${n} |`, 20, ((i + 1) * 12) + 20)
           })
-
+  
           const attachment = new MessageAttachment(canvas.toBuffer(), 'leaderboard.png')
           const embed = new MessageEmbed()
             .setTitle(`k/d leaderboard, out of ${x[1].of} survivors`)
@@ -1523,7 +2114,7 @@ client.on('message', async message => {
             .setImage('attachment://leaderboard.png')
           message.channel.send(embed)
         }
-      } else if (message.content.substring(21,27) === 'meters') {
+      } else if (message.content.substring(22,28) === 'meters') {
         const rankQuery = await db.query(`
           select
             p.pname, ps.pskills, ps.psdeaths, ps.pskd, ps.psdamage, ps.psmeters, ps.psheadshots, ps.psbrainshots, ps.psstatus,
@@ -1541,19 +2132,19 @@ client.on('message', async message => {
           order by ps.psmeters desc
           limit 50
         `, [message.channel.id])
-
+  
         if (rankQuery.rows.length > 0) {
           const canvas = createCanvas(915, 640)
           const ctx = canvas.getContext('2d')
-
+  
           ctx.fillStyle = 'rgba(0,0,25,1)'
           ctx.beginPath()
-          ctx.fillRect(18, 18, 889, 608)
+          ctx.fillRect(18, 18, 890, 608)
           ctx.stroke()
-
+  
           ctx.fillStyle = 'rgba(50,50,50,1)'
           ctx.beginPath()
-          ctx.fillRect(20, 20, 885, 600 + 4)
+          ctx.fillRect(20, 20, 886, 600 + 4)
           ctx.stroke()
           
           rankQuery.rows.pop()
@@ -1571,17 +2162,17 @@ client.on('message', async message => {
             score: 'score',
             rankk: 'rank'
           }, ...rows]
-
+  
           for (let i = 1; i < 50; i++) {
             ctx.fillStyle = i % 2 > 0 ? 'rgba(15,0,0,1)' : 'rgba(50,50,50,1)'
             if (rows[i-1].psstatus === 1) {
               ctx.fillStyle = 'rgba(0,25,0,1)'
             }
             ctx.beginPath()
-            ctx.fillRect(20, (i * 12) + 3 + 20, 885, 12)
+            ctx.fillRect(20, (i * 12) + 3 + 20, 886, 12)
             ctx.stroke()
           }
-
+  
           x.map((n) => {
             const keys = Object.keys(n)
             const row = keys.map((key) => {
@@ -1611,7 +2202,7 @@ client.on('message', async message => {
                 case 'psdamage':
                   j = `${n[key]}`
                   klength = j.length
-                  r = j.padStart((12 - klength) + klength)
+                  r = j.padStart((13 - klength) + klength)
                   return r
                 case 'pskd':
                   j = `${n[key]}`
@@ -1637,7 +2228,7 @@ client.on('message', async message => {
             ctx.fillStyle = 'white'
             ctx.fillText(`${n} |`, 20, ((i + 1) * 12) + 20)
           })
-
+  
           const attachment = new MessageAttachment(canvas.toBuffer(), 'leaderboard.png')
           const embed = new MessageEmbed()
             .setTitle(`meters leaderboard, out of ${x[1].of} survivors`)
@@ -1667,19 +2258,19 @@ client.on('message', async message => {
           order by (ps.psheadshots + ps.psbrainshots + ps.pskd + (ps.psmeters * 0.005) + (ps.psdamage * 0.005) + ps.pskills - ps.psdeaths) desc
           limit 50
         `, [message.channel.id])
-
+  
         if (rankQuery.rows.length > 0) {
           const canvas = createCanvas(915, 640)
           const ctx = canvas.getContext('2d')
-
+  
           ctx.fillStyle = 'rgba(0,0,25,1)'
           ctx.beginPath()
-          ctx.fillRect(18, 18, 889, 608)
+          ctx.fillRect(18, 18, 890, 608)
           ctx.stroke()
-
+  
           ctx.fillStyle = 'rgba(50,50,50,1)'
           ctx.beginPath()
-          ctx.fillRect(20, 20, 885, 600 + 4)
+          ctx.fillRect(20, 20, 886, 600 + 4)
           ctx.stroke()
           
           // rankQuery.rows.pop()
@@ -1697,17 +2288,17 @@ client.on('message', async message => {
             score: 'score',
             rankk: 'rank'
           }, ...rows]
-
+  
           for (let i = 0; i < 50; i++) {
             ctx.fillStyle = i % 2 > 0 ? 'rgba(15,0,0,1)' : 'rgba(50,50,50,1)'
             if (rows[i-1] && rows[i-1].psstatus === 1) {
               ctx.fillStyle = 'rgba(0,25,0,1)'
             }
             ctx.beginPath()
-            ctx.fillRect(20, (i * 12) + 3 + 20, 885, 12)
+            ctx.fillRect(20, (i * 12) + 3 + 20, 886, 12)
             ctx.stroke()
           }
-
+  
           x.map((n) => {
             const keys = Object.keys(n)
             const row = keys.map((key) => {
@@ -1737,7 +2328,7 @@ client.on('message', async message => {
                 case 'psdamage':
                   j = `${n[key]}`
                   klength = j.length
-                  r = j.padStart((12 - klength) + klength)
+                  r = j.padStart((13 - klength) + klength)
                   return r
                 case 'pskd':
                   j = `${n[key]}`
@@ -1763,7 +2354,7 @@ client.on('message', async message => {
             ctx.fillStyle = 'white'
             ctx.fillText(`${n} |`, 20, ((i + 1) * 12) + 20)
           })
-
+  
           const attachment = new MessageAttachment(canvas.toBuffer(), 'leaderboard.png')
           const embed = new MessageEmbed()
             .setTitle(`leaderboard by overall score, out of ${x[1].of} survivors`)
@@ -1783,240 +2374,288 @@ client.on('message', async message => {
   // }
 })
 
+// spyHash
+// client.on('message', async (message) => {
+//   const { content, author } = message
+//   const { id } = author
+//   const epdSpy = `!epd-spy `
+//   const add = `add `
+//   const remove = `remove `
+//   const list = `list`
+
+//   if (content.substring(0,epdSpy.length) === epdSpy) {
+
+//     if (content.substring(epdSpy.length, epdSpy.length + add.length) === add) {
+//       const targetPlayerName = message.content.substring(epdSpy.length + add.length, content.length)
+//       const expires = new Date().getTime() + FOURTY_EIGHT_HOURS
+//       spyHash[`${targetPlayerName}`][`${id}`] = {
+//         expires,
+//         id
+//       }
+//       fs.writeFileSync(spyDb, JSON.stringify(spyHash))
+//       if (spyHash[`${targetPlayerName}`][`${id}`]) {
+//         message.channel.send(`Citizen \`${targetPlayerName}\` will be traced for 48 hours.`)
+//       } else {
+//         message.channel.send(`Could not add \`${targetPlayerName}\`.`)
+//       }
+//     } else if (content.substring(epdSpy.length, epdSpy.length + remove.length) === remove) {
+//       const targetPlayerName = message.content.substring(epdSpy.length + remove.length, content.length)
+//       delete spyHash[`${targetPlayerName}`][`${id}`]
+//       fs.writeFileSync(spyDb, JSON.stringify(spyHash))
+//       if (!spyHash[`${targetPlayerName}`][`${id}`]) {
+//         message.channel.send(`Removed \`${targetPlayerName}\` from surveillance list.`)
+//       } else {
+//         message.channel.send(`Could not remove \`${targetPlayerName}\`.`)
+//       }
+//     } else if (content.substring(epdSpy.length, epdSpy.length + list.length) === list) {
+//       if (Object.keys(spyHash).length > 0) {
+//         Object
+//           .keys(spyHash)
+//           .forEach(key => message.channel
+//             .send(`Surveillance of \`${key}\` requested by <@${spyHash[key][`${id}`].id}> expires in ${(((new Date().getTime() - spyHash[key].expires)/60000)/60).toFixed(0) * -1} hours.`))
+//       } else {
+//         message.channel.send(`EPD Spy is idle.`)
+//       }
+//     }
+
+//   }
+
+// })
+
 // safezone handler
-client.on('message', async (message) => {
-  const { content, author } = message
-  const { id } = author
-  const safezone = `!safezone `
-  const add = `add `
-  const remove = `remove `
-  const list = `list`
+// client.on('message', async (message) => {
+//   const { content, author } = message
+//   const { id } = author
+//   const safezone = `!safezone `
+//   const add = `add `
+//   const remove = `remove `
+//   const list = `list`
 
-  if (content.substring(0,safezone.length) === safezone) {
+//   if (content.substring(0,safezone.length) === safezone) {
 
-    if (content.substring(safezone.length, safezone.length + add.length) === add) {
-      const targetPlayerName = message.content.substring(safezone.length + add.length, content.length)
-      const expires = new Date().getTime() + THREE_HOURS
-      safezoneHash[`${targetPlayerName}`] = {
-        expires,
-        id
-      }
-      fs.writeFileSync(safezoneDb, JSON.stringify(safezoneHash))
-      if (safezoneHash[`${targetPlayerName}`]) {
-        message.channel.send(`Citizen \`${targetPlayerName}\` authorized by <@${id}> for 3 hours`)
-      } else {
-        message.channel.send(`Could not add \`${targetPlayerName}\` <@${id}>`)
-      }
-    } else if (content.substring(safezone.length, safezone.length + remove.length) === remove) {
-      const targetPlayerName = message.content.substring(safezone.length + remove.length, content.length)
-      delete safezoneHash[`${targetPlayerName}`]
-      fs.writeFileSync(safezoneDb, JSON.stringify(safezoneHash))
-      if (!safezoneHash[`${targetPlayerName}`]) {
-        message.channel.send(`Removed \`${targetPlayerName}\` <@${id}>`)
-      } else {
-        message.channel.send(`Could not remove \`${targetPlayerName}\` <@${id}>`)
-      }
-    } else if (content.substring(safezone.length, safezone.length + list.length) === list) {
-      if (Object.keys(safezoneHash).length > 0) {
-        Object
-          .keys(safezoneHash)
-          .forEach(key => message.channel
-            .send(`\`${key}\` authorized by <@${safezoneHash[key].id}> expires in ${((new Date().getTime() - safezoneHash[key].expires)/60000).toFixed(0) * -1} minutes`))
-      } else {
-        message.channel.send(`Zero authorized access`)
-      }
-    }
+//     if (content.substring(safezone.length, safezone.length + add.length) === add) {
+//       const targetPlayerName = message.content.substring(safezone.length + add.length, content.length)
+//       const expires = new Date().getTime() + THREE_HOURS
+//       safezoneHash[`${targetPlayerName}`] = {
+//         expires,
+//         id
+//       }
+//       fs.writeFileSync(safezoneDb, JSON.stringify(safezoneHash))
+//       if (safezoneHash[`${targetPlayerName}`]) {
+//         message.channel.send(`Citizen \`${targetPlayerName}\` authorized by <@${id}> for 3 hours`)
+//       } else {
+//         message.channel.send(`Could not add \`${targetPlayerName}\` <@${id}>`)
+//       }
+//     } else if (content.substring(safezone.length, safezone.length + remove.length) === remove) {
+//       const targetPlayerName = message.content.substring(safezone.length + remove.length, content.length)
+//       delete safezoneHash[`${targetPlayerName}`]
+//       fs.writeFileSync(safezoneDb, JSON.stringify(safezoneHash))
+//       if (!safezoneHash[`${targetPlayerName}`]) {
+//         message.channel.send(`Removed \`${targetPlayerName}\` <@${id}>`)
+//       } else {
+//         message.channel.send(`Could not remove \`${targetPlayerName}\` <@${id}>`)
+//       }
+//     } else if (content.substring(safezone.length, safezone.length + list.length) === list) {
+//       if (Object.keys(safezoneHash).length > 0) {
+//         Object
+//           .keys(safezoneHash)
+//           .forEach(key => message.channel
+//             .send(`\`${key}\` authorized by <@${safezoneHash[key].id}> expires in ${((new Date().getTime() - safezoneHash[key].expires)/60000).toFixed(0) * -1} minutes`))
+//       } else {
+//         message.channel.send(`Zero authorized access`)
+//       }
+//     }
 
-  }
+//   }
 
-})
+// })
 
 // judges handler
-client.on('message', async (message) => {
-  const { content, author } = message
-  const { id } = author
-  const judges = `!judges `
-  const add = `add `
-  const remove = `remove `
-  const list = `list`
+// client.on('message', async (message) => {
+//   const { content, author } = message
+//   const { id } = author
+//   const judges = `!judges `
+//   const add = `add `
+//   const remove = `remove `
+//   const list = `list`
 
-  if (content.substring(0,judges.length) === judges) {
+//   if (content.substring(0,judges.length) === judges) {
 
-    if (content.substring(judges.length, judges.length + add.length) === add) {
-      const targetPlayerName = message.content.substring(judges.length + add.length, content.length)
-      whitelistHash[`${targetPlayerName}`] = id
-      fs.writeFileSync(whitelistDb, JSON.stringify(whitelistHash))
-      if (whitelistHash[`${targetPlayerName}`]) {
-        message.channel.send(`Judge \`${targetPlayerName}\` authorized by <@${id}>`)
-      } else {
-        message.channel.send(`Could not add \`${targetPlayerName}\` <@${id}>`)
-      }
-    } else if (content.substring(judges.length, judges.length + remove.length) === remove) {
-      const targetPlayerName = message.content.substring(judges.length + remove.length, content.length)
-      delete whitelistHash[`${targetPlayerName}`]
-      fs.writeFileSync(whitelistDb, JSON.stringify(whitelistHash))
-      if (!whitelistHash[`${targetPlayerName}`]) {
-        message.channel.send(`Removed \`${targetPlayerName}\` <@${id}>`)
-      } else {
-        message.channel.send(`Could not remove \`${targetPlayerName}\` <@${id}>`)
-      }
-    } else if (content.substring(judges.length, judges.length + list.length) === list) {
-      if (Object.keys(whitelistHash).length > 0) {
-        Object
-          .keys(whitelistHash)
-          .forEach(key => message.channel
-            .send(`Judge \`${key}\` authorized by <@${whitelistHash[key]}>`))
-      } else {
-        message.channel.send(`Zero authorized access`)
-      }
-    }
+//     if (content.substring(judges.length, judges.length + add.length) === add) {
+//       const targetPlayerName = message.content.substring(judges.length + add.length, content.length)
+//       whitelistHash[`${targetPlayerName}`] = id
+//       fs.writeFileSync(whitelistDb, JSON.stringify(whitelistHash))
+//       if (whitelistHash[`${targetPlayerName}`]) {
+//         message.channel.send(`Judge \`${targetPlayerName}\` authorized by <@${id}>`)
+//       } else {
+//         message.channel.send(`Could not add \`${targetPlayerName}\` <@${id}>`)
+//       }
+//     } else if (content.substring(judges.length, judges.length + remove.length) === remove) {
+//       const targetPlayerName = message.content.substring(judges.length + remove.length, content.length)
+//       delete whitelistHash[`${targetPlayerName}`]
+//       fs.writeFileSync(whitelistDb, JSON.stringify(whitelistHash))
+//       if (!whitelistHash[`${targetPlayerName}`]) {
+//         message.channel.send(`Removed \`${targetPlayerName}\` <@${id}>`)
+//       } else {
+//         message.channel.send(`Could not remove \`${targetPlayerName}\` <@${id}>`)
+//       }
+//     } else if (content.substring(judges.length, judges.length + list.length) === list) {
+//       if (Object.keys(whitelistHash).length > 0) {
+//         Object
+//           .keys(whitelistHash)
+//           .forEach(key => message.channel
+//             .send(`Judge \`${key}\` authorized by <@${whitelistHash[key]}>`))
+//       } else {
+//         message.channel.send(`Zero authorized access`)
+//       }
+//     }
 
-  }
+//   }
 
-})
+// })
 
 const bailbondsClient = new DiscordClient()
 
-bailbondsClient.once('ready', async () => {
-  setInterval(async () => {
-    // get all bounties for this server
-    const sql = `select count(p.pname) as numbounties from bountys b, playersservers ps, players p, servers s where b.btargetpsid = ps.psid and ps.sid = s.sid and p.pid = ps.pid`
-    const query = await db.query(sql, [])
-    query.rows.forEach(({ numbounties }) => {
-      const status = `out for ${numbounties} bounties on DayZ.`
-      console.log(status)
-      bailbondsClient.user.setActivity(status, { type: 'WATCHING' })
-    })
-  }, 1000 * 30)
-})
+// bailbondsClient.once('ready', async () => {
+//   setInterval(async () => {
+//     // get all bounties for this server
+//     const sql = `select count(p.pname) as numbounties from bountys b, playersservers ps, players p, servers s where b.btargetpsid = ps.psid and ps.sid = s.sid and p.pid = ps.pid`
+//     const query = await db.query(sql, [])
+//     query.rows.forEach(({ numbounties }) => {
+//       const status = `out for ${numbounties} bounties on DayZ.`
+//       // console.log(status)
+//       bailbondsClient.user.setActivity(status, { type: 'WATCHING' })
+//     })
+//   }, 1000 * 30)
+// })
 
-bailbondsClient.on('message', async (message) => {
-  console.log(`bot recieved message`, message.content)
-  // has guild, is in channel
-  // !rooster bounty c1000 sunday satan 002
-  if (message.content.substring(0,10) === '!bailbonds') {
-    if (message.content.substring(11,19) === 'bounties') {
-      if (message.content.substring(20,21) === 'c') {
-        const split = message.content.split(' ')
-        const n = split[2].split('c')[1]
-        const bountyWorth = parseInt(n)
-        const targetPlayer = message.content.substring(22 + n.length, message.content.length)
-        const pdid = message.author.id
-        const { username } = message.author
-        const discordIssuerName = username
-        const survivorSql = `select ps.psid, p.pname, ps.pscredits from playersservers ps, players p where ps.pid = p.pid and p.pdid = $1`
-        const survivorQuery = await db.query(survivorSql, [pdid])
-        if (survivorQuery.rows.length > 0) {
-          const { pscredits, pname, psid: psidSurvivor } = survivorQuery.rows.reduce((a,c) => c, null)
-          const psidTargetSql = `select ps.psid from playersservers ps, players p where ps.pid = p.pid and p.pname = $1`
-          const psidTargetQuery = await db.query(psidTargetSql, [targetPlayer])
-          if (psidTargetQuery.rows.length > 0) {
-            const { psid: psidTarget } = psidTargetQuery.rows.reduce((a,c) => c, null)
-            if (pscredits < bountyWorth) {
-              message.channel.send(`Survivor _${pname}_ (_${discordIssuerName}_) cannot afford a c${bountyWorth} bounty.`)
-            } else {
-              const bountysSql = `insert into bountys (bissuerpsid, btargetpsid, bworth) values ($1, $2, $3)`
-              const bountysQuery = await db.query(bountysSql, [psidSurvivor, psidTarget, bountyWorth])
-              if (bountysQuery.rows.length > 0) {
-                message.channel.send(`Bounty worth c${bountyWorth} issued against survivor _${targetPlayer}_.`)
-              } else {
-                message.channel.send(`Bounties are currently unavailable at the time, sorry..`)
-              }
-            }
-          } else {
-            message.channel.send(`Could not issue bounty, unable to find any survivor by the name of _${targetPlayer}_.`)
-          }
-        } else {
-          message.channel.send(`Unable to pinpoint _${username}_'s survivor. Have they claimed it?`)
-        }
-      } else {
-        // get all bounties for this server
-        const sidSql = `select sid from servers where sdchannel = $1`
-        const sidQuery = await db.query(sidSql, [message.channel.id])
-        if (sidQuery.rows.length > 0) {
-          const { sid } = sidQuery.rows.reduce((a,c) => c, null)
-          const sql = `select b.bworth, b.bborn, p.pname from bountys b, playersservers ps, players p, servers s where b.btargetpsid = ps.psid and ps.sid = s.sid and ps.pid = p.pid and s.sid = $1 limit 50`
-          const query = await db.query(sql, [sid])
-          const m = query.rows.map(row => `Survivor _${row.pname}_ is wanted for c${b.bworth} since ${b.bborn}.\n`)
-          message.channel.send(m)
-        } else {
-          message.channel.send(`Could not find any servers for this channel.`)
-        }
-      }
-    }
-  }
-})
+// bailbondsClient.on('message', async (message) => {
+//   // console.log(`bot recieved message`, message.content)
+//   // has guild, is in channel
+//   // !rooster bounty c1000 sunday satan 002
+//   if (message.content.substring(0,10) === '!bailbonds') {
+//     if (message.content.substring(11,19) === 'bounties') {
+//       if (message.content.substring(20,21) === 'c') {
+//         const split = message.content.split(' ')
+//         const n = split[2].split('c')[1]
+//         const bountyWorth = parseInt(n)
+//         const targetPlayer = message.content.substring(22 + n.length, message.content.length)
+//         const pdid = message.author.id
+//         const { username } = message.author
+//         const discordIssuerName = username
+//         const survivorSql = `select ps.psid, p.pname, ps.pscredits from playersservers ps, players p where ps.pid = p.pid and p.pdid = $1`
+//         const survivorQuery = await db.query(survivorSql, [pdid])
+//         if (survivorQuery.rows.length > 0) {
+//           const { pscredits, pname, psid: psidSurvivor } = survivorQuery.rows.reduce((a,c) => c, null)
+//           const psidTargetSql = `select ps.psid from playersservers ps, players p where ps.pid = p.pid and p.pname = $1`
+//           const psidTargetQuery = await db.query(psidTargetSql, [targetPlayer])
+//           if (psidTargetQuery.rows.length > 0) {
+//             const { psid: psidTarget } = psidTargetQuery.rows.reduce((a,c) => c, null)
+//             if (pscredits < bountyWorth) {
+//               message.channel.send(`Survivor _${pname}_ (_${discordIssuerName}_) cannot afford a c${bountyWorth} bounty.`)
+//             } else {
+//               const bountysSql = `insert into bountys (bissuerpsid, btargetpsid, bworth) values ($1, $2, $3)`
+//               const bountysQuery = await db.query(bountysSql, [psidSurvivor, psidTarget, bountyWorth])
+//               if (bountysQuery.rows.length > 0) {
+//                 message.channel.send(`Bounty worth c${bountyWorth} issued against survivor _${targetPlayer}_.`)
+//               } else {
+//                 message.channel.send(`Bounties are currently unavailable at the time, sorry..`)
+//               }
+//             }
+//           } else {
+//             message.channel.send(`Could not issue bounty, unable to find any survivor by the name of _${targetPlayer}_.`)
+//           }
+//         } else {
+//           message.channel.send(`Unable to pinpoint _${username}_'s survivor. Have they claimed it?`)
+//         }
+//       } else {
+//         // get all bounties for this server
+//         const sidSql = `select sid from servers where sdchannel = $1`
+//         const sidQuery = await db.query(sidSql, [message.channel.id])
+//         if (sidQuery.rows.length > 0) {
+//           const { sid } = sidQuery.rows.reduce((a,c) => c, null)
+//           const sql = `select b.bworth, b.bborn, p.pname from bountys b, playersservers ps, players p, servers s where b.btargetpsid = ps.psid and ps.sid = s.sid and ps.pid = p.pid and s.sid = $1 limit 50`
+//           const query = await db.query(sql, [sid])
+//           const m = query.rows.map(row => `Survivor _${row.pname}_ is wanted for c${b.bworth} since ${b.bborn}.\n`)
+//           message.channel.send(m)
+//         } else {
+//           message.channel.send(`Could not find any servers for this channel.`)
+//         }
+//       }
+//     }
+//   }
+// })
 
 // bailbondsClient.login('NzQxNzAyNTgxMTg0NjI2Nzk4.Xy7aWw.ZPSXU31BnKRRazJWq_aoWBfUzIU')
 
 // @archaeon link #inception-servers <nitrado_service_id>
 
-const archaeonClient = new DiscordClient()
+// const archaeonClient = new DiscordClient()
 
-archaeonClient.once('ready', async () => {
-  setInterval(async () => {
-    const status = `0 factions across 1 servers on DayZ.`
-    console.log(status)
-    archaeonClient.user.setActivity(status, { type: 'WATCHING' })
-  }, 1000 * 30)
-})
+// archaeonClient.once('ready', async () => {
+//   setInterval(async () => {
+//     const status = `0 factions across 1 servers on DayZ.`
+//     // console.log(status)
+//     archaeonClient.user.setActivity(status, { type: 'WATCHING' })
+//   }, 1000 * 30)
+// })
 
-archaeonClient.on('message', async (message) => {
-  console.log(`bot recieved message`, message.content)
-  // has guild, is in channel
-  // !rooster bounty c1000 sunday satan 002
-  if (message.content.substring(0,10) === '!bailbonds') {
-    if (message.content.substring(11,19) === 'bounties') {
-      if (message.content.substring(20,21) === 'c') {
-        const split = message.content.split(' ')
-        const n = split[2].split('c')[1]
-        const bountyWorth = parseInt(n)
-        const targetPlayer = message.content.substring(22 + n.length, message.content.length)
-        const pdid = message.author.id
-        const { username } = message.author
-        const discordIssuerName = username
-        const survivorSql = `select ps.psid, p.pname, ps.pscredits from playersservers ps, players p where ps.pid = p.pid and p.pdid = $1`
-        const survivorQuery = await db.query(survivorSql, [pdid])
-        if (survivorQuery.rows.length > 0) {
-          const { pscredits, pname, psid: psidSurvivor } = survivorQuery.rows.reduce((a,c) => c, null)
-          const psidTargetSql = `select ps.psid from playersservers ps, players p where ps.pid = p.pid and p.pname = $1`
-          const psidTargetQuery = await db.query(psidTargetSql, [targetPlayer])
-          if (psidTargetQuery.rows.length > 0) {
-            const { psid: psidTarget } = psidTargetQuery.rows.reduce((a,c) => c, null)
-            if (pscredits < bountyWorth) {
-              message.channel.send(`Survivor _${pname}_ (_${discordIssuerName}_) cannot afford a c${bountyWorth} bounty.`)
-            } else {
-              const bountysSql = `insert into bountys (bissuerpsid, btargetpsid, bworth) values ($1, $2, $3)`
-              const bountysQuery = await db.query(bountysSql, [psidSurvivor, psidTarget, bountyWorth])
-              if (bountysQuery.rows.length > 0) {
-                message.channel.send(`Bounty worth c${bountyWorth} issued against survivor _${targetPlayer}_.`)
-              } else {
-                message.channel.send(`Bounties are currently unavailable at the time, sorry..`)
-              }
-            }
-          } else {
-            message.channel.send(`Could not issue bounty, unable to find any survivor by the name of _${targetPlayer}_.`)
-          }
-        } else {
-          message.channel.send(`Unable to pinpoint _${username}_'s survivor. Have they claimed it?`)
-        }
-      } else {
-        // get all bounties for this server
-        const sidSql = `select sid from servers where sdchannel = $1`
-        const sidQuery = await db.query(sidSql, [message.channel.id])
-        if (sidQuery.rows.length > 0) {
-          const { sid } = sidQuery.rows.reduce((a,c) => c, null)
-          const sql = `select b.bworth, b.bborn, p.pname from bountys b, playersservers ps, players p, servers s where b.btargetpsid = ps.psid and ps.sid = s.sid and ps.pid = p.pid and s.sid = $1 limit 50`
-          const query = await db.query(sql, [sid])
-          const m = query.rows.map(row => `Survivor _${row.pname}_ is wanted for c${b.bworth} since ${b.bborn}.\n`)
-          message.channel.send(m)
-        } else {
-          message.channel.send(`Could not find any servers for this channel.`)
-        }
-      }
-    }
-  }
-})
+// archaeonClient.on('message', async (message) => {
+//   // console.log(`bot recieved message`, message.content)
+//   // has guild, is in channel
+//   // !rooster bounty c1000 sunday satan 002
+//   if (message.content.substring(0,10) === '!bailbonds') {
+//     if (message.content.substring(11,19) === 'bounties') {
+//       if (message.content.substring(20,21) === 'c') {
+//         const split = message.content.split(' ')
+//         const n = split[2].split('c')[1]
+//         const bountyWorth = parseInt(n)
+//         const targetPlayer = message.content.substring(22 + n.length, message.content.length)
+//         const pdid = message.author.id
+//         const { username } = message.author
+//         const discordIssuerName = username
+//         const survivorSql = `select ps.psid, p.pname, ps.pscredits from playersservers ps, players p where ps.pid = p.pid and p.pdid = $1`
+//         const survivorQuery = await db.query(survivorSql, [pdid])
+//         if (survivorQuery.rows.length > 0) {
+//           const { pscredits, pname, psid: psidSurvivor } = survivorQuery.rows.reduce((a,c) => c, null)
+//           const psidTargetSql = `select ps.psid from playersservers ps, players p where ps.pid = p.pid and p.pname = $1`
+//           const psidTargetQuery = await db.query(psidTargetSql, [targetPlayer])
+//           if (psidTargetQuery.rows.length > 0) {
+//             const { psid: psidTarget } = psidTargetQuery.rows.reduce((a,c) => c, null)
+//             if (pscredits < bountyWorth) {
+//               message.channel.send(`Survivor _${pname}_ (_${discordIssuerName}_) cannot afford a c${bountyWorth} bounty.`)
+//             } else {
+//               const bountysSql = `insert into bountys (bissuerpsid, btargetpsid, bworth) values ($1, $2, $3)`
+//               const bountysQuery = await db.query(bountysSql, [psidSurvivor, psidTarget, bountyWorth])
+//               if (bountysQuery.rows.length > 0) {
+//                 message.channel.send(`Bounty worth c${bountyWorth} issued against survivor _${targetPlayer}_.`)
+//               } else {
+//                 message.channel.send(`Bounties are currently unavailable at the time, sorry..`)
+//               }
+//             }
+//           } else {
+//             message.channel.send(`Could not issue bounty, unable to find any survivor by the name of _${targetPlayer}_.`)
+//           }
+//         } else {
+//           message.channel.send(`Unable to pinpoint _${username}_'s survivor. Have they claimed it?`)
+//         }
+//       } else {
+//         // get all bounties for this server
+//         const sidSql = `select sid from servers where sdchannel = $1`
+//         const sidQuery = await db.query(sidSql, [message.channel.id])
+//         if (sidQuery.rows.length > 0) {
+//           const { sid } = sidQuery.rows.reduce((a,c) => c, null)
+//           const sql = `select b.bworth, b.bborn, p.pname from bountys b, playersservers ps, players p, servers s where b.btargetpsid = ps.psid and ps.sid = s.sid and ps.pid = p.pid and s.sid = $1 limit 50`
+//           const query = await db.query(sql, [sid])
+//           const m = query.rows.map(row => `Survivor _${row.pname}_ is wanted for c${b.bworth} since ${b.bborn}.\n`)
+//           message.channel.send(m)
+//         } else {
+//           message.channel.send(`Could not find any servers for this channel.`)
+//         }
+//       }
+//     }
+//   }
+// })
 
 // archaeonClient.login('NzUwNDYwNDMxNDc0MjI5MzYx.X062vQ.s0TB1-zFsLgJNXfFioKIvXs0-zA')
 
@@ -2453,5 +3092,5 @@ app.post('/api/v2/confirm-email/:key', db.connected(), async (req, res) => {
 })
 
 // web app serverp
-app.listen(port, () => console.log(`Example app listening at http://localhost:${port}`))
+app.listen(port, () => console.log(`Archaeon API listening at http://localhost:${port}`))
 // https.createServer(sslOptions, app).listen(9001)

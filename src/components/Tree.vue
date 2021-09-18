@@ -19,13 +19,19 @@
 
           <b-icon v-if="branch.childNodes.length" style="font-size:12px;width:20px;padding-right:8px;" :icon="props.expanded ? 'caret-down' : 'caret-up'"></b-icon>
           <b-icon v-if="branch.childNodes.length" :icon="'pencil-alt'" style="font-size:8px;width:12px;color:aqua;opacity:.5;" @click.native="onDraw(branch, i)"></b-icon>
+          <b-icon v-if="branch.childNodes.length" :icon="'eraser'" style="font-size:8px;width:12px;color:yellow;opacity:.5;" @click.native="onErase(branch)"></b-icon>
           <b-icon :icon="'clone'" style="font-size:8px;width:12px;color:magenta;opacity:.5;" @click.native="onClone(branch, i)"></b-icon>
-          <b-icon v-if="!branch.childNodes.length" :icon="'eye-dropper'" style="font-size:8px;width:12px;color:aqua;opacity:.5;" @click.native="onCloneAndAug(branch, i)"></b-icon>
+          <!-- <b-icon v-if="!branch.childNodes.length" :icon="'eye-dropper'" style="font-size:8px;width:12px;color:aqua;opacity:.5;" @click.native="onCloneAndAug(branch, i)"></b-icon> -->
           <b-icon :icon="'times'" style="font-size:8px;width:12px;color:red;opacity:.5;" @click.native="onDelete(branch, i)"></b-icon>
 
         </template>
 
-        <Tree ref="treeRef" :key="treeId" v-if="branch.childNodes" :branches="branch.childNodes" @mutate="onMutate" :freeze="freeze" />
+        <Tree ref="treeRef" :key="treeId" v-if="branch.childNodes" :branches="branch.childNodes" @mutate="onMutate" :freeze="freeze"
+          :circle-color="circleColor"
+          :circle-opacity="circleOpacity"
+          :circle-radius="circleRadius"
+          :circle-weight="circleWeight"
+        />
 
       </b-menu-item>
     </div>
@@ -47,39 +53,41 @@ const getRandomColor = () => {
 
 export default {
   name: 'Tree',
-  props: ['branches','freeze'],
+  props: ['branches', 'freeze', 'circleColor', 'circleOpacity', 'circleRadius', 'circleWeight'],
   components: {
     MutableInput,
     Tree
   },
   data () {
     return {
+      circleConfig: null,
+      circles: [],
       shouldEmitMutate: false,
       treeId: null
     }
   },
   mounted () {
-    console.log()
     this.treeId = Math.random()
   },
   methods: {
     onDraw (branch, i) {
-      const fillColor = getRandomColor()
-      const circles = [ ...branch.childNodes ]
+      const circleConfig = {
+        color: `aqua`,
+        fillColor: this.circleColor,
+        opacity: this.circleOpacity * .01,
+        weight: this.circleWeight,
+        fillOpacity: this.circleOpacity * .01,
+        radius: this.circleRadius
+      }
+      branch.circleConfig = branch.circleConfig || circleConfig
+      branch.circles = [ ...branch.childNodes ]
         .filter(childNode => childNode.nodeName === 'pos')
         .map((childNode, childNodeIndex) => {
           const latLng = L.LocUtil.locToCoords({
             loc1: childNode.getAttribute('x'),
             loc2: childNode.getAttribute('z')
           }, window.archaeonScalingParams)
-          const circle = L.circle(latLng, window.ARCHAEON_CIRCLE_OPTIONS || {
-            color: 'cyan',
-            fillColor: fillColor,
-            opacity: 1.0,
-            weight: 1,
-            fillOpacity: 1.0,
-            radius: 1500
-          })
+          const circle = L.circle(latLng, window.ARCHAEON_CIRCLE_OPTIONS || branch.circleConfig)
           circle.on('mouseover', (e) => {
             const content = `${branch.getAttribute('name')}\n${childNode.getAttribute('x')}/${childNode.getAttribute('z')}&nbsp;&nbsp;&nbsp;&nbsp;`
             const popup = L.popup()
@@ -126,13 +134,23 @@ export default {
             // }
           })
           circle.addTo(window.iZurvive._map)
-          // marker.addTo(window.iZurvive._map)
+          return {
+            circle
+          }
         })
+    },
+    onErase (branch, hard = true) {
+      branch.circles.forEach(circle => window.iZurvive._map.removeLayer(circle.circle))
+      if (hard) {
+        branch.circleConfig = null
+      }
     },
     onClone (branch, i) {
       console.log(branch, i)
       const clone = branch.cloneNode(true)
       branch.parentNode.appendChild(clone)
+      this.onErase(branch, false)
+      this.onDraw(branch, i)
       this.onUpdate(branch)
     },
     onCloneAndAug (branch, i) {

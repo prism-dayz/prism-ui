@@ -92,6 +92,8 @@ create table playersservers (
   foreign key (sid) references servers(sid) on delete cascade on update cascade
 );
 
+-- update playersservers set pskills = 0, psdeaths = 0, psdamage = 0.0, psmeters = 0.0, pskd = 0.0, psheadshots = 0, psbrainshots = 0, psstatus = 0, pscurrentkillstreak = 0, pskillstreak = 0, pscredits = 0, pswages = 0, pscurrentsurvivaltime = 0, pssurvivaltime = 0, pstimeonserver = 0 where pid is not null
+
 -- new link (stats) between player and server
 insert into playersservers (pid, sid) values ('xbox-id-001','nitrado-service-id-001');
 insert into playersservers (pid, sid) values ('xbox-id-002','nitrado-service-id-001');
@@ -180,97 +182,97 @@ CREATE INDEX "IDX_session_expire" ON "session" ("expire");
 --
 
 -- get all stats for each player from each server
-select ps.pskills, p.pname, s.sname from playersservers ps, players p, servers s where p.pid = ps.pid and ps.sid = s.sid;
+-- select ps.pskills, p.pname, s.sname from playersservers ps, players p, servers s where p.pid = ps.pid and ps.sid = s.sid;
 
--- get all stats for each player from single server
-select ps.pskills, p.pname, s.sname from playersservers ps, players p, servers s where p.pid = ps.pid and ps.sid = s.sid and s.sid = 'nitrado-service-id-001';
+-- -- get all stats for each player from single server
+-- select ps.pskills, p.pname, s.sname from playersservers ps, players p, servers s where p.pid = ps.pid and ps.sid = s.sid and s.sid = 'nitrado-service-id-001';
 
--- get all stats for each player across all servers
--- i.e., the result won't contain a server name they will be reduced
-select sum(ps.pskills) as across_the_board_all_time, p.pname from playersservers ps, players p, servers s where p.pid = ps.pid and ps.sid = s.sid group by p.pname;
+-- -- get all stats for each player across all servers
+-- -- i.e., the result won't contain a server name they will be reduced
+-- select sum(ps.pskills) as across_the_board_all_time, p.pname from playersservers ps, players p, servers s where p.pid = ps.pid and ps.sid = s.sid group by p.pname;
 
--- update a player kills for a specific server (on kill)
-update playersservers set pskills = pskills + 1 where pid = 'xbox-id-002' and sid = 'nitrado-service-id-002';
+-- -- update a player kills for a specific server (on kill)
+-- update playersservers set pskills = pskills + 1 where pid = 'xbox-id-002' and sid = 'nitrado-service-id-002';
 
---
-select (ps.pskills/(case psdeaths when 0.0000 then 1.0000 else psdeaths end)), p.pname from playersservers ps, players p where ps.pid = p.pid;
+-- --
+-- select (ps.pskills/(case psdeaths when 0.0000 then 1.0000 else psdeaths end)), p.pname from playersservers ps, players p where ps.pid = p.pid;
 
-select
-  r.*, (select count(*) from playersservers) as of
-from (
-  select
-    ps.pskd,
-    p.pname,
-    row_number() over(order by ps.pskd desc) as rankk
-  from
-    playersservers ps,
-    players p
-  where
-    ps.pid = p.pid
-  group by
-    ps.pskd,
-    p.pname
-  order by ps.pskd desc
-) r
-where
-  r.pname = 'im noCHARMANDER'
-;
+-- select
+--   r.*, (select count(*) from playersservers) as of
+-- from (
+--   select
+--     ps.pskd,
+--     p.pname,
+--     row_number() over(order by ps.pskd desc) as rankk
+--   from
+--     playersservers ps,
+--     players p
+--   where
+--     ps.pid = p.pid
+--   group by
+--     ps.pskd,
+--     p.pname
+--   order by ps.pskd desc
+-- ) r
+-- where
+--   r.pname = 'im noCHARMANDER'
+-- ;
 
--- by headshots
-select
-  p.pname, ps.pskills, ps.psdeaths, ps.pskd, ps.psdamage, ps.psmeters, ps.psheadshots, ps.psbrainshots,
-  row_number() over(order by ps.pskd desc) as rankk
-from
-  playersservers ps,
-  players p
-where
-  ps.pid = p.pid
-group by
-  p.pname, ps.pskills, ps.psdeaths, ps.pskd, ps.psdamage, ps.psmeters, ps.psheadshots, ps.psbrainshots
-order by ps.pskd desc
-;
+-- -- by headshots
+-- select
+--   p.pname, ps.pskills, ps.psdeaths, ps.pskd, ps.psdamage, ps.psmeters, ps.psheadshots, ps.psbrainshots,
+--   row_number() over(order by ps.pskd desc) as rankk
+-- from
+--   playersservers ps,
+--   players p
+-- where
+--   ps.pid = p.pid
+-- group by
+--   p.pname, ps.pskills, ps.psdeaths, ps.pskd, ps.psdamage, ps.psmeters, ps.psheadshots, ps.psbrainshots
+-- order by ps.pskd desc
+-- ;
 
--- by kd
-select
-  p.pname, ps.pskills, ps.psdeaths, ps.pskd, ps.psdamage, ps.psmeters, ps.psheadshots, ps.psbrainshots, ps.psstatus,
-  (ps.psheadshots + ps.psbrainshots + ps.pskd + (ps.psmeters * 0.005) + (ps.psdamage * 0.005) + ps.pskills - ps.psdeaths) as score,
-  row_number() over(order by (ps.psheadshots + ps.psbrainshots + ps.pskd + (ps.psmeters * 0.005) + (ps.psdamage * 0.005) + ps.pskills - ps.psdeaths) desc) as rankk
-from
-  playersservers ps,
-  players p
-where
-  ps.pid = p.pid and ps.psstatus = 1
-group by
-  p.pname, ps.pskills, ps.psdeaths, ps.pskd, ps.psdamage, ps.psmeters, ps.psheadshots, ps.psbrainshots, ps.psstatus
-order by (ps.psheadshots + ps.psbrainshots + ps.pskd + (ps.psmeters * 0.005) + (ps.psdamage * 0.005) + ps.pskills - ps.psdeaths) desc
-;
+-- -- by kd
+-- select
+--   p.pname, ps.pskills, ps.psdeaths, ps.pskd, ps.psdamage, ps.psmeters, ps.psheadshots, ps.psbrainshots, ps.psstatus,
+--   (ps.psheadshots + ps.psbrainshots + ps.pskd + (ps.psmeters * 0.005) + (ps.psdamage * 0.005) + ps.pskills - ps.psdeaths) as score,
+--   row_number() over(order by (ps.psheadshots + ps.psbrainshots + ps.pskd + (ps.psmeters * 0.005) + (ps.psdamage * 0.005) + ps.pskills - ps.psdeaths) desc) as rankk
+-- from
+--   playersservers ps,
+--   players p
+-- where
+--   ps.pid = p.pid and ps.psstatus = 1
+-- group by
+--   p.pname, ps.pskills, ps.psdeaths, ps.pskd, ps.psdamage, ps.psmeters, ps.psheadshots, ps.psbrainshots, ps.psstatus
+-- order by (ps.psheadshots + ps.psbrainshots + ps.pskd + (ps.psmeters * 0.005) + (ps.psdamage * 0.005) + ps.pskills - ps.psdeaths) desc
+-- ;
 
-select * from (
-  select
-    p.pname, ps.pskills, ps.psdeaths, ps.pskd, ps.psdamage, ps.psmeters, ps.psheadshots, ps.psbrainshots, ps.psstatus,
-    (ps.psheadshots + ps.psbrainshots + ps.pskd + (ps.psmeters * 0.005) + (ps.psdamage * 0.005) + ps.pskills - ps.psdeaths) as score,
-    row_number() over(order by (ps.psheadshots + ps.psbrainshots + ps.pskd + (ps.psmeters * 0.005) + (ps.psdamage * 0.005) + ps.pskills - ps.psdeaths) desc) as rankk,
-    (select count(*) from playersservers) as of
-  from
-    playersservers ps,
-    players p
-  where
-    ps.pid = p.pid
-  group by
-    p.pname, ps.pskills, ps.psdeaths, ps.pskd, ps.psdamage, ps.psmeters, ps.psheadshots, ps.psbrainshots, ps.psstatus
-  order by (ps.psheadshots + ps.psbrainshots + ps.pskd + (ps.psmeters * 0.005) + (ps.psdamage * 0.005) + ps.pskills - ps.psdeaths) desc
-) as leaderboard where leaderboard.pname = 'sundaysatan'
-;
+-- select * from (
+--   select
+--     p.pname, ps.pskills, ps.psdeaths, ps.pskd, ps.psdamage, ps.psmeters, ps.psheadshots, ps.psbrainshots, ps.psstatus,
+--     (ps.psheadshots + ps.psbrainshots + ps.pskd + (ps.psmeters * 0.005) + (ps.psdamage * 0.005) + ps.pskills - ps.psdeaths) as score,
+--     row_number() over(order by (ps.psheadshots + ps.psbrainshots + ps.pskd + (ps.psmeters * 0.005) + (ps.psdamage * 0.005) + ps.pskills - ps.psdeaths) desc) as rankk,
+--     (select count(*) from playersservers) as of
+--   from
+--     playersservers ps,
+--     players p
+--   where
+--     ps.pid = p.pid
+--   group by
+--     p.pname, ps.pskills, ps.psdeaths, ps.pskd, ps.psdamage, ps.psmeters, ps.psheadshots, ps.psbrainshots, ps.psstatus
+--   order by (ps.psheadshots + ps.psbrainshots + ps.pskd + (ps.psmeters * 0.005) + (ps.psdamage * 0.005) + ps.pskills - ps.psdeaths) desc
+-- ) as leaderboard where leaderboard.pname = 'sundaysatan'
+-- ;
 
-select p.pname, ps.pskills, ps.psdeaths, ps.pskd, ps.psdamage, ps.psmeters, ps.psheadshots, ps.psbrainshots from playersservers ps, players p where ps.pid = p.pid;
+-- select p.pname, ps.pskills, ps.psdeaths, ps.pskd, ps.psdamage, ps.psmeters, ps.psheadshots, ps.psbrainshots from playersservers ps, players p where ps.pid = p.pid;
 
-update playersservers set psstatus = 0 where pid = 'F0AA981AF53143BA6EFBF52657C38702C1EF74B7';
-update playersservers set psstatus = 0 where pid = '33577DBBDADBD7F86D2CB519DB21491AD4A20BCA';
-update playersservers set psstatus = 0 where pid = 'E8C2FF85987F69756BA81DA2D2447B5EE10DC718';
-update playersservers set psstatus = 0 where pid = '9F1ADA042A1C2FC3A99DA762780C0BD6D95380DB';
-update playersservers set psstatus = 0 where pid = '9F1ADA042A1C2FC3A99DA762780C0BD6D95380DB';
-update playersservers set psstatus = 0 where pid = '4C117411D887CC0CAF73CA6665E28911808D4872';
-update playersservers set psstatus = 0 where pid = '2E4CAB0F6E49594AE81F6E4A5C7B8F2B73ED2FCD';
-update playersservers set psstatus = 0 where pid = '';
+-- update playersservers set psstatus = 0 where pid = 'F0AA981AF53143BA6EFBF52657C38702C1EF74B7';
+-- update playersservers set psstatus = 0 where pid = '33577DBBDADBD7F86D2CB519DB21491AD4A20BCA';
+-- update playersservers set psstatus = 0 where pid = 'E8C2FF85987F69756BA81DA2D2447B5EE10DC718';
+-- update playersservers set psstatus = 0 where pid = '9F1ADA042A1C2FC3A99DA762780C0BD6D95380DB';
+-- update playersservers set psstatus = 0 where pid = '9F1ADA042A1C2FC3A99DA762780C0BD6D95380DB';
+-- update playersservers set psstatus = 0 where pid = '4C117411D887CC0CAF73CA6665E28911808D4872';
+-- update playersservers set psstatus = 0 where pid = '2E4CAB0F6E49594AE81F6E4A5C7B8F2B73ED2FCD';
+-- update playersservers set psstatus = 0 where pid = '';
 
-select p.pname from playersservers ps, players p where ps.pid = p.pid and ps.psstatus = 1;
+-- select p.pname from playersservers ps, players p where ps.pid = p.pid and ps.psstatus = 1;
