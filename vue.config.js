@@ -1,7 +1,7 @@
 const webpack = require('webpack')
 
 module.exports = {
-  publicPath: '/',
+  publicPath: 'https://prism-dayz.github.io/prism-ui',
   runtimeCompiler: true,
   configureWebpack: {
     plugins: [

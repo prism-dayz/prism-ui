@@ -276,3 +276,16 @@ CREATE INDEX "IDX_session_expire" ON "session" ("expire");
 -- update playersservers set psstatus = 0 where pid = '';
 
 -- select p.pname from playersservers ps, players p where ps.pid = p.pid and ps.psstatus = 1;
+
+update playersservers set pskills = 0,
+  psdeaths = 0,
+  psdamage = 0,
+  psmeters = 0.0,
+  pskd = 0.0,
+  psheadshots = 0,
+  psbrainshots = 0,
+  psstatus = 0,
+  pscurrentkillstreak = 0,
+  pskillstreak = 0
+  where pid is not null
+;
